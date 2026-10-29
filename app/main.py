@@ -1,4 +1,4 @@
-"""Routes and a basic page for the provider onboarding skeleton."""
+"""Routes and the synthetic provider onboarding page."""
 
 from typing import Annotated
 
@@ -45,14 +45,19 @@ PAGE = """<!doctype html>
     th, td { text-align: left; padding: 10px 4px; border-bottom: 1px solid #ddd; }
     .suggestion { border-top: 1px solid #cbd5df; padding: 16px 0; }
     #request-status { min-height: 1.5em; }
+    input[type="date"] { display: block; font: inherit; padding: 8px;
+                         max-width: 100%; box-sizing: border-box; }
+    .date-review { background: #f1f6f8; border-radius: 6px; padding: 14px; }
+    .date-review label { margin-top: 12px; }
+    button:disabled { cursor: default; }
   </style>
 </head>
 <body>
 <main>
   <h1>Onboard HQ</h1>
   <p>Provider onboarding dashboard</p>
-  <p><strong>Prototype:</strong> Synthetic data and fixed example suggestions.
-     Updates are not analyzed or saved.</p>
+  <p><strong>Prototype:</strong> Synthetic provider data. Updates are sent for model
+     analysis; suggestions and date confirmations are not saved.</p>
 
   <section aria-labelledby="provider-heading">
     <h2 id="provider-heading">1. Select a provider</h2>
@@ -86,8 +91,9 @@ PAGE = """<!doctype html>
 
   <section aria-labelledby="review-heading">
     <h2 id="review-heading">4. AI suggestions / human review</h2>
-    <p>Submit an update to display the fixed placeholder response.</p>
-    <p>Approve, correct, and reject controls are disabled in this skeleton.</p>
+    <p>Submit an update to see proposed changes and supporting text.</p>
+    <p>Check and confirm inferred dates in this page. Confirming a date does not
+       approve a status change. The checklist remains unchanged.</p>
     <div id="review-results" aria-live="polite"></div>
   </section>
 </main>
@@ -127,47 +133,87 @@ PAGE = """<!doctype html>
   const status = document.getElementById("request-status");
   const results = document.getElementById("review-results");
 
+  function appendDateReview(parent, suggestion, index) {
+    const review = document.createElement("div");
+    review.className = "date-review";
+    appendText(review, "p", suggestion.date_explanation);
+    const label = appendText(review, "label", "Check or correct inferred date");
+    const input = document.createElement("input");
+    input.type = "date";
+    input.id = "suggestion-date-" + index;
+    input.value = suggestion.proposed_date ?? "";
+    input.required = true;
+    label.htmlFor = input.id;
+    review.append(input);
+    const confirmation = appendText(review, "p", "Awaiting date confirmation.");
+    confirmation.setAttribute("role", "status");
+    const button = appendText(review, "button", "Confirm date");
+    button.type = "button";
+    input.addEventListener("input", () => {
+      confirmation.textContent = "Awaiting date confirmation.";
+      button.disabled = false;
+    });
+    button.addEventListener("click", () => {
+      if (!input.reportValidity()) return;
+      confirmation.textContent = "Date confirmed in this page: " + input.value +
+        ". Checklist statuses are unchanged.";
+      button.disabled = true;
+    });
+    parent.append(review);
+  }
+
+  function appendSuggestion(suggestion, index) {
+    const item = document.createElement("div");
+    item.className = "suggestion";
+    appendText(item, "h3", suggestion.requirement);
+    appendText(item, "p", "Proposed status: " + suggestion.proposed_status);
+    appendText(item, "p", "Supporting text: " + suggestion.supporting_text);
+    if (suggestion.date_text) {
+      appendText(item, "p", "Original date wording: " + suggestion.date_text);
+    }
+    if (suggestion.date_requires_confirmation) {
+      appendDateReview(item, suggestion, index);
+    } else {
+      appendText(item, "p", "Proposed date: " +
+        (suggestion.proposed_date ?? "Not specified"));
+    }
+    results.append(item);
+  }
+
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (submitButton.disabled) return;
     const updateText = document.getElementById("update-text").value;
     submitButton.disabled = true;
-    status.textContent = "Loading placeholder response...";
+    status.textContent = "Analyzing update...";
     results.replaceChildren();
+    let failureMessage = "Unable to analyze update. Please try again.";
     try {
       const response = await fetch(form.action, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({provider, update_text: updateText})
       });
-      if (!response.ok) {
-        throw new Error("The placeholder response could not be loaded.");
-      }
       const data = await response.json();
+      if (!response.ok) {
+        if (typeof data.detail === "string") failureMessage = data.detail;
+        throw new Error(failureMessage);
+      }
       appendText(results, "h3", "Original update");
       appendText(results, "p", updateText);
       appendText(results, "p", data.message);
-      for (const suggestion of data.suggestions) {
-        const item = document.createElement("div");
-        item.className = "suggestion";
-        appendText(item, "h3", suggestion.requirement);
-        appendText(item, "p", "Proposed status: " + suggestion.proposed_status);
-        appendText(item, "p", "Proposed date: " +
-          (suggestion.proposed_date ?? "Not specified"));
-        appendText(item, "p", "Supporting text: " + suggestion.supporting_text);
-        for (const label of ["Approve", "Correct", "Reject"]) {
-          const button = appendText(item, "button", label);
-          button.type = "button";
-          button.disabled = true;
+      data.suggestions.forEach(appendSuggestion);
+      if (data.ambiguities.length) {
+        appendText(results, "h3", "Warnings and ambiguities");
+        for (const ambiguity of data.ambiguities) {
+          appendText(results, "p", ambiguity);
         }
-        results.append(item);
       }
-      appendText(results, "h3", "Ambiguities");
-      for (const ambiguity of data.ambiguities) {
-        appendText(results, "p", ambiguity);
-      }
-      status.textContent = "Placeholder response displayed. Nothing was saved.";
-    } catch (error) {
-      status.textContent = "Unable to load the placeholder response. Try again.";
+      status.textContent = data.suggestions.length ?
+        "Suggestions displayed. Nothing was saved." : data.message;
+    } catch {
+      results.replaceChildren();
+      status.textContent = failureMessage;
     } finally {
       submitButton.disabled = false;
     }

@@ -25,3 +25,20 @@ uv run ruff check
 uv run mypy
 uv run pytest
 ```
+
+## What this feature does
+
+Select the fictional provider and enter a synthetic update. The model extracts
+suggested changes and supporting text. Unknown requirements appear as warnings
+alongside valid suggestions; no applicable suggestions yields insufficient information.
+
+For incomplete dates, Python uses the most recent valid occurrence on or before
+the proposed start date. Check the original wording and inference explanation,
+edit the inferred date if needed, then select **Confirm date**. Editing a date
+clears its confirmation, and another analysis or page refresh resets confirmations.
+Without a proposed start date, incomplete dates stay unset with a warning.
+
+Date confirmation is temporary and does not approve a status change. The checklist
+never changes, and there is no database, saved history, account system, or retrieval.
+The automated tests establish application behavior with deterministic model output;
+they do not measure real-model extraction quality.
