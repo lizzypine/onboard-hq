@@ -8,6 +8,7 @@ The full proposal is in docs/proposal.md.
 
 - app/main.py: routes and the page. No business rules.
 - app/agent.py: the Pydantic AI agent and output models.
+- app/updates.py: extraction, scope filtering, and date-resolution orchestration. No HTTP or UI code.
 - app/rules/__init__.py: compatibility exports for plain Python rules.
 - app/rules/scope.py: requirement scope and empty-suggestion validation. No FastAPI, no LLM client.
 - app/rules/dates.py: calendar date inference in plain Python. No FastAPI, no LLM client.

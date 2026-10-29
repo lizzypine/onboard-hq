@@ -1,9 +1,24 @@
 """Routes and a basic page for the provider onboarding skeleton."""
 
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse
+from typing import Annotated
 
-from app.agent import AnalyzeUpdateRequest, AnalyzeUpdateResponse, SuggestedChange
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from pydantic_ai import Agent
+from pydantic_ai.exceptions import (
+    ModelAPIError,
+    ModelTimeoutError,
+    UnexpectedModelBehavior,
+)
+
+from app.agent import (
+    AgentConfigurationError,
+    AnalyzeUpdateRequest,
+    AnalyzeUpdateResponse,
+    ExtractionResult,
+    build_agent,
+)
+from app.updates import process_update
 
 app = FastAPI(title="Onboard HQ")
 
@@ -169,18 +184,23 @@ async def index() -> str:
     return PAGE
 
 
+def get_extraction_agent() -> Agent[None, ExtractionResult]:
+    """Create the configured agent only when analysis is requested."""
+    try:
+        return build_agent()
+    except AgentConfigurationError:
+        raise HTTPException(503, "Model analysis is not configured.") from None
+
+
 @app.post("/updates/analyze", response_model=AnalyzeUpdateResponse)
-async def analyze_update(request: AnalyzeUpdateRequest) -> AnalyzeUpdateResponse:
-    """Return the same placeholder for every structurally valid request."""
-    return AnalyzeUpdateResponse(
-        message="Fixed example only. Your update has not been analyzed or saved.",
-        suggestions=[
-            SuggestedChange(
-                requirement="Drug screening",
-                proposed_status="Completed",
-                proposed_date=None,
-                supporting_text="Example supporting text (placeholder).",
-            )
-        ],
-        ambiguities=["Ambiguity detection is not implemented."],
-    )
+async def analyze_update(
+    request: AnalyzeUpdateRequest,
+    agent: Annotated[Agent[None, ExtractionResult], Depends(get_extraction_agent)],
+) -> AnalyzeUpdateResponse:
+    """Analyze an update and translate model failures into safe HTTP errors."""
+    try:
+        return await process_update(request, agent)
+    except (TimeoutError, ModelTimeoutError):
+        raise HTTPException(504, "Analysis timed out. Please try again.") from None
+    except (ModelAPIError, UnexpectedModelBehavior):
+        raise HTTPException(502, "Unable to analyze update. Please try again.") from None
