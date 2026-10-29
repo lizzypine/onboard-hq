@@ -10,6 +10,7 @@ The full proposal is in docs/proposal.md.
 - app/agent.py: the Pydantic AI agent and output models.
 - app/rules/__init__.py: compatibility exports for plain Python rules.
 - app/rules/scope.py: requirement scope and empty-suggestion validation. No FastAPI, no LLM client.
+- app/rules/dates.py: calendar date inference in plain Python. No FastAPI, no LLM client.
 - This is the starting layout. When a module takes on a second responsibility, split it by responsibility (for example, `app/rules.py` into `app/rules/quota.py` and `app/rules/scope.py`) and update this section in the same change.
 
 ## Commands
