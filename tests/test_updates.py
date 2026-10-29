@@ -224,3 +224,47 @@ def test_context_unchanged(update_request: AnalyzeUpdateRequest) -> None:
     result = asyncio.run(updates.process_update(update_request, agent))
     assert result.suggestions[0].proposed_status == "Received"
     assert update_request.model_dump() == before
+
+
+def test_invalid_model_date_keeps_suggestion_with_warning(
+    client: TestClient,
+    extraction_model: TestModel,
+    update_request: AnalyzeUpdateRequest,
+) -> None:
+    extraction_model.custom_output_args = {
+        "suggestions": [
+            {
+                "requirement": "Drug screening",
+                "proposed_status": "Scheduled",
+                "supporting_text": "Scheduled for January 1 in an invalid year.",
+                "date": {
+                    "text": "January 1 in an invalid year",
+                    "year": 10**40,
+                    "month": 1,
+                    "day": 1,
+                },
+            }
+        ]
+    }
+    response = client.post(
+        "/updates/analyze", json=update_request.model_dump(mode="json")
+    )
+    assert response.status_code == 200
+    assert len(response.json()["suggestions"]) == 1
+    assert response.json()["suggestions"][0]["proposed_date"] is None
+    assert response.json()["ambiguities"]
+
+
+def test_invalid_gateway_returns_safe_configuration_error(
+    monkeypatch: pytest.MonkeyPatch, update_request: AnalyzeUpdateRequest
+) -> None:
+    monkeypatch.setenv("LLM_API_TOKEN", "synthetic-secret")
+    monkeypatch.setenv("LLM_API_GATEWAY", "https://example.invalid:abc/v1")
+    monkeypatch.setenv("LLM_MODEL", "synthetic-model")
+    with TestClient(main.app, raise_server_exceptions=False) as client:
+        response = client.post(
+            "/updates/analyze", json=update_request.model_dump(mode="json")
+        )
+    assert response.status_code == 503
+    assert "synthetic-secret" not in response.text
+    assert "example.invalid" not in response.text

@@ -26,6 +26,8 @@ from app import rules
         (None, None, None, "2027-01-15", None, False),
         (None, None, 18, "0001-01-01", None, False),
         (2026, 2, 29, "2027-01-15", None, False),
+        (10**40, 1, 1, "2027-01-15", None, False),
+        (None, 10**40, 1, "2027-01-15", None, False),
     ],
 )
 def test_resolve_date(

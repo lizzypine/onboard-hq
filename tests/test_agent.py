@@ -79,3 +79,19 @@ def test_prompt_contains_context_without_credentials(
     assert "Outstanding" in captured
     assert update_request.update_text in captured
     assert "synthetic-secret-not-for-prompts" not in captured
+
+
+@pytest.mark.parametrize(
+    "gateway",
+    ["https://example.invalid:abc/v1", "missing-scheme", "ftp://example.invalid/v1"],
+)
+def test_invalid_gateway_configuration(
+    monkeypatch: pytest.MonkeyPatch, gateway: str
+) -> None:
+    monkeypatch.setenv("LLM_API_TOKEN", "synthetic-secret")
+    monkeypatch.setenv("LLM_API_GATEWAY", gateway)
+    monkeypatch.setenv("LLM_MODEL", "synthetic-model")
+    with pytest.raises(agent_module.AgentConfigurationError) as exc:
+        agent_module.build_agent()
+    assert "synthetic-secret" not in str(exc.value)
+    assert gateway not in str(exc.value)

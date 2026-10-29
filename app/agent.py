@@ -2,6 +2,7 @@
 
 import os
 from datetime import date
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
@@ -97,6 +98,16 @@ Do not change existing statuses or approve suggestions. Return only structured o
 """
 
 
+def _validate_gateway(gateway: str) -> None:
+    try:
+        parsed = urlsplit(gateway)
+        _ = parsed.port  # Access validates malformed or out-of-range ports.
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("An HTTP(S) gateway host is required.")
+    except ValueError:
+        raise AgentConfigurationError("Model gateway configuration is invalid.") from None
+
+
 def build_agent(model: Model | None = None) -> Agent[None, ExtractionResult]:
     """Build lazily; injected test models need no gateway configuration."""
     if model is None:
@@ -105,6 +116,7 @@ def build_agent(model: Model | None = None) -> Agent[None, ExtractionResult]:
         if not all(values):
             raise AgentConfigurationError("Model configuration is incomplete.")
         token, gateway, model_name = values
+        _validate_gateway(gateway)
         provider = OpenAIProvider(base_url=gateway, api_key=token)
         model = OpenAIChatModel(model_name, provider=provider)
     return Agent(model, output_type=ExtractionResult, instructions=INSTRUCTIONS)

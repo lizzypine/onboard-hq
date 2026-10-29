@@ -22,7 +22,7 @@ def _explicit_date(year: int, month: int | None, day: int) -> DateResolution:
         return _unresolved("Incomplete date: a stated year needs a month and day.")
     try:
         stated = date(year, month, day)
-    except ValueError:
+    except (ValueError, OverflowError):
         return _unresolved("The stated date is not a valid calendar date.")
     return DateResolution(stated, False, None, None)
 
@@ -56,7 +56,7 @@ def _valid_partial(month: int | None, day: int) -> bool:
         return True
     try:
         date(2000, month, day)  # A leap year permits every possible month/day.
-    except ValueError:
+    except (ValueError, OverflowError):
         return False
     return True
 
