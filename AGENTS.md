@@ -26,6 +26,7 @@ The full proposal is in docs/proposal.md.
 
 - Never commit to main. Make each change on its own branch and open a pull request with gh pr create. The description has a ## Summary (what changed and why, citing docs/proposal.md) and a ## Test plan checklist (checked items were run; unchecked items are left for the reviewer).- After pushing, run gh pr checks --watch and report the result.-
   Never merge a pull request. The person merges after reviewing it.
+- When a pull request is ready to open, has just opened, or is refreshed after code changes, use `.agents/skills/pr-diagram/SKILL.md` to maintain one code-verified Mermaid change diagram while preserving Summary and Test plan.
 
 ## Spec
 
