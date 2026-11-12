@@ -1,9 +1,12 @@
 """Routes and the synthetic provider onboarding page."""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import (
     ModelAPIError,
@@ -18,9 +21,81 @@ from app.agent import (
     ExtractionResult,
     build_agent,
 )
+from app.database import (
+    DatabaseConfigurationError,
+    DatabasePool,
+    DatabaseUnavailable,
+    create_pool,
+    database_url,
+)
+from app.models import ProviderSummary, StoredProvider
+from app.repository import RecordNotFound
+from app.repository.providers import ProviderRepository
 from app.updates import process_update
 
-app = FastAPI(title="Onboard HQ")
+
+@asynccontextmanager
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+    pool: DatabasePool | None
+    try:
+        pool = create_pool(database_url())
+    except DatabaseConfigurationError:
+        pool = None
+    application.state.pool = pool
+    if pool is not None:
+        await pool.open()
+    try:
+        yield
+    finally:
+        if pool is not None:
+            await pool.close()
+
+
+app = FastAPI(title="Onboard HQ", lifespan=lifespan)
+
+
+def get_pool() -> DatabasePool:
+    pool: DatabasePool | None = getattr(app.state, "pool", None)
+    if pool is None:
+        raise HTTPException(503, "Database is not configured.")
+    return pool
+
+
+def get_repository(
+    pool: Annotated[DatabasePool, Depends(get_pool)],
+) -> ProviderRepository:
+    return ProviderRepository(pool)
+
+
+@app.exception_handler(DatabaseUnavailable)
+async def database_error(_request: Request, _error: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "Database is unavailable. Check configuration and migrations."
+        },
+    )
+
+
+@app.exception_handler(RecordNotFound)
+async def missing_record(_request: Request, _error: Exception) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": "Record not found."})
+
+
+@app.get("/providers", response_model=list[ProviderSummary])
+async def providers(
+    repository: Annotated[ProviderRepository, Depends(get_repository)],
+) -> list[ProviderSummary]:
+    return await repository.list_providers()
+
+
+@app.get("/providers/{provider_id}", response_model=StoredProvider)
+async def provider(
+    provider_id: UUID,
+    repository: Annotated[ProviderRepository, Depends(get_repository)],
+) -> StoredProvider:
+    return await repository.get_provider(provider_id)
+
 
 PAGE = """<!doctype html>
 <html lang="en">
@@ -249,4 +324,6 @@ async def analyze_update(
     except (TimeoutError, ModelTimeoutError):
         raise HTTPException(504, "Analysis timed out. Please try again.") from None
     except (ModelAPIError, UnexpectedModelBehavior):
-        raise HTTPException(502, "Unable to analyze update. Please try again.") from None
+        raise HTTPException(
+            502, "Unable to analyze update. Please try again."
+        ) from None

@@ -1,7 +1,6 @@
 """Structured onboarding extraction and request/response contracts."""
 
 import os
-from datetime import date
 from urllib.parse import urlsplit
 
 from pydantic import BaseModel, Field
@@ -10,51 +9,28 @@ from pydantic_ai.models import Model
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
+from app.models import (
+    AnalyzeUpdateRequest,
+    AnalyzeUpdateResponse,
+    ProviderContext,
+    Requirement,
+    SuggestedChange,
+)
 
-class Requirement(BaseModel):
-    """A provider's current onboarding requirement."""
-
-    name: str
-    status: str
-    deadline: date | None = None
-
-
-class ProviderContext(BaseModel):
-    """Synthetic provider details supplied with an update."""
-
-    provider_id: str
-    name: str
-    provider_type: str
-    proposed_start_date: date | None = None
-    requirements: list[Requirement]
-
-
-class AnalyzeUpdateRequest(BaseModel):
-    """The selected provider context and original free-text update."""
-
-    provider: ProviderContext
-    update_text: str
-
-
-class SuggestedChange(BaseModel):
-    """A proposed change presented for human review."""
-
-    requirement: str
-    proposed_status: str
-    proposed_date: date | None = None
-    supporting_text: str
-    date_text: str | None = None
-    date_inferred: bool = False
-    date_explanation: str | None = None
-    date_requires_confirmation: bool = False
-
-
-class AnalyzeUpdateResponse(BaseModel):
-    """Suggested changes and ambiguities displayed by the page."""
-
-    message: str
-    suggestions: list[SuggestedChange] = Field(default_factory=list)
-    ambiguities: list[str] = Field(default_factory=list)
+__all__ = [
+    "INSTRUCTIONS",
+    "AgentConfigurationError",
+    "AnalyzeUpdateRequest",
+    "AnalyzeUpdateResponse",
+    "ExtractedSuggestion",
+    "ExtractionResult",
+    "MentionedDate",
+    "ProviderContext",
+    "Requirement",
+    "SuggestedChange",
+    "build_agent",
+    "extract_update",
+]
 
 
 class MentionedDate(BaseModel):
@@ -105,7 +81,9 @@ def _validate_gateway(gateway: str) -> None:
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             raise ValueError("An HTTP(S) gateway host is required.")
     except ValueError:
-        raise AgentConfigurationError("Model gateway configuration is invalid.") from None
+        raise AgentConfigurationError(
+            "Model gateway configuration is invalid."
+        ) from None
 
 
 def build_agent(model: Model | None = None) -> Agent[None, ExtractionResult]:

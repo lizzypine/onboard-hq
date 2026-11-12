@@ -38,8 +38,10 @@ Run schema migrations explicitly, with PostgreSQL 18's tools on PATH:
 PATH="$(brew --prefix postgresql@18)/bin:.superpowers/bin:$PATH" dbmate -e DATABASE_URL_UNPOOLED migrate
 ```
 
-The schema has seven application tables; the page is connected in the next
-implementation tasks. Migrations never run at application startup.
+The schema has seven application tables. Seed the existing synthetic provider
+explicitly with `uv run --env-file .env python -m app.seed`. Seeding again preserves
+existing checklist progress and does not add new template entries to an established
+checklist. Migrations and seeds never run at application startup.
 
 For the complete automated suite, run:
 

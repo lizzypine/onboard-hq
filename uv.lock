@@ -1014,6 +1014,7 @@ dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "psycopg", extra = ["binary"] },
     { name = "psycopg-pool" },
+    { name = "pydantic" },
     { name = "pydantic-ai-slim", extra = ["openai"] },
     { name = "python-dotenv" },
 ]
@@ -1030,6 +1031,7 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.162.0" },
     { name = "psycopg", extras = ["binary"], specifier = "==3.3.8" },
     { name = "psycopg-pool", specifier = "==3.3.3" },
+    { name = "pydantic", specifier = "==2.14.1" },
     { name = "pydantic-ai-slim", extras = ["openai"], specifier = ">=2.61.0" },
     { name = "python-dotenv", specifier = ">=1.2.4" },
 ]
