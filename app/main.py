@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
@@ -27,6 +28,8 @@ from app.models import (
     StoredProvider,
     SubmitUpdateRequest,
 )
+from app.monitoring import get_dashboard, get_monitoring_date
+from app.monitoring_models import ProviderDashboard
 from app.page import PAGE
 from app.repository import RecordNotFound
 from app.repository.providers import ProviderRepository
@@ -95,6 +98,15 @@ async def provider(
     repository: Annotated[ProviderRepository, Depends(get_repository)],
 ) -> StoredProvider:
     return await repository.get_provider(provider_id)
+
+
+@router.get("/providers/{provider_id}/dashboard", response_model=ProviderDashboard)
+async def provider_dashboard(
+    provider_id: UUID,
+    repository: Annotated[ProviderRepository, Depends(get_repository)],
+    as_of_date: Annotated[date, Depends(get_monitoring_date)],
+) -> ProviderDashboard:
+    return await get_dashboard(repository, provider_id, as_of_date=as_of_date)
 
 
 @router.get("/", response_class=HTMLResponse)
