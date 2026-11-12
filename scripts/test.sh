@@ -3,6 +3,7 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 export UV_CACHE_DIR="${UV_CACHE_DIR:-${TMPDIR:-/tmp}/onboard-uv-cache}"
+export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$root/.superpowers/browsers}"
 if [ -z "${PG18_BIN:-}" ]; then
   if [ -d /opt/homebrew/opt/postgresql@18/bin ]; then PG18_BIN=/opt/homebrew/opt/postgresql@18/bin
   elif [ -d /usr/local/opt/postgresql@18/bin ]; then PG18_BIN=/usr/local/opt/postgresql@18/bin

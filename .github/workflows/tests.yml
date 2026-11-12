@@ -24,11 +24,19 @@ jobs:
           --health-retries 10
     env:
       TEST_DATABASE_URL: postgresql://postgres:${{ github.run_id }}-${{ github.run_attempt }}@127.0.0.1:5432/onboard_hq_test_ci?sslmode=disable
+      PLAYWRIGHT_BROWSERS_PATH: .superpowers/browsers
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.1
       - run: uv sync --locked --dev
       - run: bash scripts/install-dbmate.sh
+      - run: uv run playwright install --with-deps chromium
       - run: uv run ruff check
       - run: uv run mypy
       - run: uv run pytest
+      - uses: actions/upload-artifact@v7.0.2
+        if: failure()
+        with:
+          name: browser-traces
+          path: test-results/
+          if-no-files-found: ignore
