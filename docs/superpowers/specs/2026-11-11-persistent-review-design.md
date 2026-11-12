@@ -13,6 +13,8 @@ The project-wide spec is [the proposal](../../proposal.md), particularly **Saved
 - Use the user's empty Onboard HQ Neon PostgreSQL database.
 - Use dbmate SQL migrations to establish and evolve the schema.
 - Read application connection settings from `DATABASE_URL` in the environment. It is already configured locally.
+- Use Pydantic for validation, and require automated unit, integration, and end-to-end tests.
+- Allow for possible future local/cloud semantic routing using OpenCode at `opencode.ai`, confirmed as the tool the user meant by `opencode-ai`; its integration is outside this slice.
 
 ## Approaches
 
@@ -31,6 +33,8 @@ Persist the five linked record types from the proposal. Keep current extraction,
 Do not add RAG, policy documents, email ingestion, uploads, reminders, real employee records, multi-provider message handling, a status taxonomy, or automatic readiness judgments. Keep the current date policy. A drug-screen appointment date is distinct from its deadline: applying a proposed date must never overwrite a deadline.
 
 The simulated role is explicitly a demonstration control. A caller can select Manager mode; it does not prove identity. The server still checks the selected role on review requests so the prototype does not implement authorization solely by hiding buttons.
+
+Future semantic routing may choose between local and cloud models using OpenCode (`opencode.ai`). Preserve the existing injectable model factory and validate all extraction output through the same Pydantic contracts, independent of provider. Do not add a router, new model credentials, an OpenCode dependency, or speculative routing infrastructure in this slice. The current OpenAI-compatible gateway remains the execution path. Investigate OpenCode's interfaces, the application's routing policy, and fallback behavior in a separate design; provider selection alone does not define semantic routing.
 
 ## Proposed Data Model
 
@@ -92,9 +96,31 @@ Proposed modules, to be recorded in AGENTS.md when they actually exist:
 
 These file names and driver choices are proposed builder calls. Split repository responsibilities further if needed; do not create a generic persistence framework. Use server-side data loading for approval and keep database types/SQL out of plain rules.
 
+## Pydantic Validation
+
+Continue using Pydantic for structured extraction and expand its explicit contracts to persistence and review. Validate request identifiers, simulated-role values, review choices, nonblank trimmed message/status fields, valid calendar dates, and correction/confirmation field combinations. Reject unknown fields in new write-request contracts so clients cannot supply server-owned approval state or provider links. Distinguish an omitted date from an explicit clear-date action. Use field-specific strict validation where coercion could change a review choice, identifier, or confirmation flag; do not apply a blanket strictness change to existing extraction models.
+
+Validate repository records into typed application models and response contracts before exposing them to the page. Pydantic validates data shapes; plain Python review rules enforce role and business decisions, and SQL constraints/transactions enforce integrity and concurrency. Request validation errors return 422; valid Proposer requests to review remain 403. Invalid structured model output follows the existing safe model-error path and cannot become a saved approval candidate. No Pydantic model replaces server-side authorization checks or a database constraint.
+
 ## Verification and Completion
 
-All automated model work uses `TestModel` with real model requests disabled. Add PostgreSQL integration coverage, not SQLite substitutes or mocks as proof of transactions. Use a separate `TEST_DATABASE_URL`; refuse to run integration setup against the configured application database, including the same Neon database through pooled versus direct hosts. Provision local disposable PostgreSQL for local tests and a PostgreSQL service in GitHub Actions. Missing test configuration must fail with setup instructions rather than skipping tests. Preserve existing rule/extraction contracts.
+All automated model work uses `TestModel` with real model requests disabled, including the server process used by end-to-end tests. Add PostgreSQL integration coverage, not SQLite substitutes or mocks as proof of transactions. Use a separate `TEST_DATABASE_URL`; refuse to run integration setup against the configured application database, including the same Neon database through pooled versus direct hosts. Provision local disposable PostgreSQL for local tests and a PostgreSQL service in GitHub Actions. Missing test configuration must fail with setup instructions rather than skipping tests. Preserve existing rule/extraction contracts.
+
+### Unit Tests
+
+Use pytest for Pydantic validation, scope and date rules, simulated-role decisions, correction field combinations, date confirmation, and stale-version decisions without network or database access. Include malformed IDs/dates, invalid roles/outcomes, blank text, forged server-owned fields, and omission versus explicit date clearing. These tests establish deterministic data/business rules rather than model quality.
+
+### Integration Tests
+
+Exercise FastAPI endpoints, typed repository records, SQL constraints, migrations, and transaction behavior against real disposable PostgreSQL. Substitute only the model boundary with `TestModel`. Include persistence across fresh connections/app instances, seed idempotence, role enforcement at the HTTP boundary, rollback after failures, and duplicate/concurrent/stale review attempts. Check that rejected validation causes no partial writes.
+
+### End-to-End Tests
+
+Automate browser coverage using Playwright with pytest as the proposed browser tooling. Start the real FastAPI app against isolated test PostgreSQL and inject deterministic `TestModel` scenarios through a test-only server runner, not a production endpoint or a production model-switch setting. Disable real model requests in that server process and exclude application credentials from its environment. Migrate/seed the isolated database through the same tools used by the app.
+
+Run the browser through propose, pending review, simulated role switching, manager approve/correct/reject, and checklist/history reload. Assert Proposer mode cannot apply changes, inferred-date confirmation resets after editing, stale/duplicate decisions display a recoverable result, and saved state survives both browser refresh and server restart. Include insufficient information, model/database failures, and safe text rendering. Manual inspection may supplement these tests, but cannot replace them.
+
+Include all three layers in `uv run pytest` locally and in CI. Install the matching Playwright browser/runtime dependencies explicitly in setup and CI; missing browser or database setup must fail with instructions rather than silently omitting a test layer. Do not depend on live local/cloud models, Neon application data, or arbitrary waits to establish end-to-end success.
 
 Verify:
 
@@ -116,7 +142,10 @@ Run Ruff, mypy, and the complete pytest suite locally and in CI. Verify a forwar
 - [dbmate commands, environment loading, and SQL migration format](https://github.com/amacneil/dbmate)
 - [Neon connection pooling and direct connections](https://neon.com/docs/connect/connection-pooling)
 - [Psycopg async connections](https://www.psycopg.org/psycopg3/docs/advanced/async.html)
+- [Pydantic validation models](https://docs.pydantic.dev/latest/concepts/models/)
+- [Playwright's pytest integration](https://playwright.dev/python/docs/intro) and [CI setup](https://playwright.dev/python/docs/ci)
+- [OpenCode overview](https://opencode.ai/docs/) and [model/provider selection](https://opencode.ai/docs/models/) for the future integration investigation
 
 ## Left to the Builder
 
-Choose exact endpoint paths beyond the retained analysis path, column/index names, pool sizing/timeouts, the pinned tool versions, compatible PostgreSQL service version, and accessible page layout. Choose a small dedicated local test-database setup that works on this machine and document it. Decide the minimal typed repository API and response serialization. Do not change the approved date policy, add real authentication, invent provider requirements/status rules, or broaden the slice without updating the design and proposal.
+Choose exact endpoint paths beyond the retained analysis path, column/index names, pool sizing/timeouts, the pinned tool versions, compatible PostgreSQL service version, and accessible page layout. Choose a small dedicated local test-database setup that works on this machine and document it. Decide the minimal typed repository API and response serialization. Use pytest/Playwright as the proposed browser stack and pin compatible versions during planning. Do not change the approved date policy, add real authentication, implement model routing, invent provider requirements/status rules, or broaden the slice without updating the design and proposal.
