@@ -26,6 +26,8 @@ The canonical project spec is `docs/proposal.md`. `docs/proposal-v2.pdf` contain
 - `app/main.py`: routes and the page. No business rules.
 - `app/agent.py`: the Pydantic AI agent and output models.
 - `app/updates.py`: extraction, scope filtering, and date-resolution orchestration. No HTTP or UI code.
+- `app/database.py`: environment configuration and PostgreSQL connection lifecycle. No routes or model calls.
+- `db/migrations/`: dbmate SQL schema changes; `db/schema.sql` is the generated schema-only snapshot.
 - `app/rules/__init__.py`: compatibility exports for plain Python rules.
 - `app/rules/scope.py`: requirement scope and empty-suggestion validation. No FastAPI, no LLM client.
 - `app/rules/dates.py`: calendar date inference in plain Python. No FastAPI, no LLM client.
@@ -38,6 +40,7 @@ uv run fastapi dev app/main.py # run the app
 uv run ruff check             # lint
 uv run mypy                   # check types
 uv run pytest                 # run the tests
+bash scripts/test.sh uv run pytest # full suite with disposable local PostgreSQL
 ```
 
 ## Rules
