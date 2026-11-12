@@ -1,10 +1,17 @@
 """Validated application records and transport contracts."""
 
 from datetime import date, datetime
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StringConstraints,
+    model_validator,
+)
 
 
 class Requirement(BaseModel):
@@ -123,3 +130,43 @@ class SavedUpdate(BaseModel):
 class UpdateClaim(BaseModel):
     created: bool
     update: SavedUpdate
+
+
+DemoRole = Literal["proposer", "manager"]
+
+
+class ReviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    action: Literal["approve", "correct", "reject"]
+    corrected_status: NonBlank | None = None
+    date_action: Literal["preserve", "set", "clear"] = "preserve"
+    corrected_date: date | None = None
+    date_confirmed: StrictBool = False
+
+    @model_validator(mode="after")
+    def validate_combination(self) -> Self:
+        if self.action != "correct" and (
+            self.corrected_status is not None
+            or self.date_action != "preserve"
+            or self.corrected_date is not None
+        ):
+            raise ValueError("Only corrected approvals accept edited fields.")
+        if (
+            self.action == "correct"
+            and self.corrected_status is None
+            and self.date_action == "preserve"
+        ):
+            raise ValueError("A corrected approval requires an edit.")
+        if self.action == "reject" and self.date_confirmed:
+            raise ValueError("Rejection cannot confirm a date.")
+        if self.date_action == "set" and self.corrected_date is None:
+            raise ValueError("Setting a date requires a valid date.")
+        if self.date_action != "set" and self.corrected_date is not None:
+            raise ValueError("A date value requires the set action.")
+        return self
+
+
+class ReviewChange(BaseModel):
+    outcome: Literal["approved", "corrected", "rejected"]
+    applied_status: str | None
+    applied_scheduled_date: date | None
