@@ -7,7 +7,7 @@ const refreshButton = document.getElementById("refresh-data");
 const updateText = document.getElementById("update-text");
 const status = document.getElementById("request-status");
 const results = document.getElementById("review-results");
-const state = {provider: null, history: [], busy: false, generation: 0, pending: null};
+const state = {provider: null, monitoring: null, history: [], busy: false, generation: 0, pending: null};
 
 function text(parent, tag, value) {
   const element = document.createElement(tag);
@@ -39,16 +39,42 @@ function setBusy(value) {
   document.querySelectorAll(".review-fields").forEach(element => { element.disabled = value; });
 }
 
+function monitoringLabel(indicator) {
+  if (indicator.completion === "finished") return "Finished";
+  if (indicator.completion === "needs_review") {
+    return indicator.deadline_state === "past" ? "Deadline passed — needs review" : "Needs review";
+  }
+  if (indicator.deadline_state === "past") return "Overdue";
+  return indicator.deadline_state === "due_today" ? "Outstanding — due today" : "Outstanding";
+}
+
+function renderMonitoring() {
+  const summary = document.getElementById("monitoring-summary");
+  summary.hidden = !state.monitoring;
+  const asOf = document.getElementById("monitoring-as-of");
+  asOf.textContent = state.monitoring ? "As of " + state.monitoring.as_of_date + " · Hawaii (" + state.monitoring.time_zone + ")" : "";
+  for (const key of ["finished", "remaining", "overdue", "needs_review"]) {
+    document.getElementById("count-" + key).textContent = state.monitoring ? state.monitoring.counts[key] : "";
+  }
+}
+
 function renderChecklist() {
   const body = document.getElementById("requirements");
   body.replaceChildren();
-  if (!state.provider) return;
   document.getElementById("provider-description").textContent =
-    state.provider.provider_type + " · Proposed start: " + (state.provider.proposed_start_date || "Not set");
+    state.provider ? state.provider.provider_type + " · Proposed start: " + (state.provider.proposed_start_date || "Not set") : "";
+  renderMonitoring();
+  document.getElementById("empty-checklist").hidden = !state.provider || state.provider.requirements.length > 0;
+  if (!state.provider) return;
+  const indicators = new Map(state.monitoring.requirements.map(row => [row.requirement_id, row]));
   for (const requirement of state.provider.requirements) {
     const row = text(body, "tr", "");
     [requirement.name, requirement.status, requirement.scheduled_date || "Not set", requirement.deadline || "Not set"]
       .forEach(value => text(row, "td", value));
+    const indicator = indicators.get(requirement.id);
+    const cell = text(row, "td", monitoringLabel(indicator));
+    const style = indicator.completion === "outstanding" && indicator.deadline_state === "past" ? "overdue" : indicator.completion;
+    cell.className = "indicator " + style;
   }
 }
 
@@ -205,9 +231,10 @@ function renderHistory() {
 async function loadState() {
   const id = providerSelect.value;
   const generation = ++state.generation;
-  const [provider, history] = await Promise.all([api("/providers/" + id), api("/providers/" + id + "/updates")]);
+  const [dashboard, history] = await Promise.all([api("/providers/" + id + "/dashboard"), api("/providers/" + id + "/updates")]);
   if (generation !== state.generation || providerSelect.value !== id) return;
-  state.provider = provider;
+  state.provider = dashboard.provider;
+  state.monitoring = dashboard.monitoring;
   state.history = history;
   renderChecklist();
   renderHistory();
@@ -226,6 +253,7 @@ async function initialize() {
     status.textContent = "Saved checklist and review history loaded.";
   } catch {
     state.provider = null;
+    state.monitoring = null;
     state.history = [];
     renderChecklist();
     renderHistory();

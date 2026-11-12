@@ -98,6 +98,30 @@ a new request. No real accounts, checklist-exception controls, or semantic routi
 are included. Provider-type templates are separate from individual checklists;
 template edits do not silently change established checklists.
 
+The checklist shows **Finished**, **Remaining**, **Overdue**, and **Needs review**
+counts, with a Monitoring label on each row. Remaining includes uncertain items;
+Overdue and Needs review are subsets of Remaining. These synthetic completion
+rules cover the five canonical Dentist requirements: Signed offer letter,
+Received Hawaii/State NED licenses, Completed drug screening, and Approved insurance
+credentialing. Status matching trims whitespace and ignores case without changing
+the saved wording. Unrecognized statuses, requirements, or provider types show
+Needs review, which refers to the completion rule rather than a pending suggestion.
+
+Monitoring uses only saved deadlines and the server's Hawaii calendar date
+(`Pacific/Honolulu`). A deadline today is due today; an unfinished requirement
+with an earlier deadline is Overdue. Finished items have no overdue warning.
+An uncertain item with an earlier deadline shows **Deadline passed — needs review**
+without increasing the confirmed Overdue count. Appointment dates and proposed
+start dates never substitute for deadlines; existing missing deadlines remain unset.
+
+The labeled as-of date describes the loaded snapshot. Loading a provider,
+**Refresh data**, and successful analysis/review reload monitoring; there is no
+automatic midnight refresh. Pending or rejected proposals and role switches leave
+the counts unchanged. A failed refresh after a saved operation retains the whole
+previous snapshot and explains that saving succeeded. An unavailable initial load
+shows no counts and disables submission. Empty saved checklists explicitly show
+zero counts and an empty message; no checklist is described as permission to start.
+
 The automated tests establish application behavior with deterministic model output;
 they do not measure real-model extraction quality. No tests run against the Neon
 application database.

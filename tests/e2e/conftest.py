@@ -6,6 +6,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import date
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -16,7 +17,7 @@ from tests.database import ROOT, require_disposable_database
 
 
 class AppServer:
-    def __init__(self, database_url, log_path):
+    def __init__(self, database_url, log_path, *, as_of: date = date(2026, 11, 11)):
         require_disposable_database(database_url, None)
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
@@ -24,6 +25,7 @@ class AppServer:
         self.url = f"http://127.0.0.1:{self.port}"
         self.database_url = database_url
         self.scenario = "completed"
+        self.as_of = as_of
         self.log_path = log_path
         self.process = None
         self.log_handle = None
@@ -40,6 +42,8 @@ class AppServer:
                 str(self.port),
                 "--scenario",
                 self.scenario,
+                "--as-of",
+                self.as_of.isoformat(),
             ],
             cwd=ROOT,
             env={
@@ -106,7 +110,7 @@ def page(app_server, request):
     """Close Playwright's event loop before the next synchronous/asyncio test."""
     with sync_playwright() as engine:
         browser = engine.chromium.launch()
-        context = browser.new_context()
+        context = browser.new_context(timezone_id="Asia/Tokyo")
         context.tracing.start(screenshots=True, snapshots=True, sources=True)
         current_page = context.new_page()
         try:

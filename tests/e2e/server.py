@@ -2,6 +2,7 @@
 
 import argparse
 import os
+from datetime import date
 
 import uvicorn
 from pydantic_ai.models import override_allow_model_requests
@@ -9,6 +10,7 @@ from pydantic_ai.models.test import TestModel
 
 from app.agent import build_agent
 from app.main import create_app, get_agent_factory
+from app.monitoring import get_monitoring_date
 from tests.database import require_disposable_database
 
 
@@ -46,10 +48,13 @@ def output_for(scenario):
     return {"suggestions": suggestions, "ambiguities": warnings}
 
 
-def create_test_app(test_database_url: str, scenario: str):
+def create_test_app(
+    test_database_url: str, scenario: str, as_of: date = date(2026, 11, 11)
+):
     require_disposable_database(test_database_url, None)
     os.environ["DATABASE_URL"] = test_database_url
     application = create_app()
+    application.dependency_overrides[get_monitoring_date] = lambda: as_of
     output = output_for(scenario)
     application.dependency_overrides[get_agent_factory] = lambda: (
         lambda: build_agent(TestModel(custom_output_args=output))
@@ -60,6 +65,7 @@ def create_test_app(test_database_url: str, scenario: str):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--as-of", type=date.fromisoformat, default=date(2026, 11, 11))
     parser.add_argument(
         "--scenario",
         default="completed",
@@ -76,7 +82,7 @@ def main():
     args = parser.parse_args()
     with override_allow_model_requests(False):
         uvicorn.run(
-            create_test_app(os.environ["DATABASE_URL"], args.scenario),
+            create_test_app(os.environ["DATABASE_URL"], args.scenario, args.as_of),
             host="127.0.0.1",
             port=args.port,
             log_level="warning",
