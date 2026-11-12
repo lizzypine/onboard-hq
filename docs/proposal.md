@@ -90,6 +90,12 @@ The application will look up the selected provider's record and applicable onboa
 
 For the first model-connected feature, provider context will come from the existing synthetic page fixture, without retrieval or a database. Valid suggestions will remain visible alongside warnings for unknown or non-applicable requirements. If no actionable suggestions remain after filtering, the application will report insufficient information and leave the checklist unchanged.
 
+### Provider Types and Checklists
+
+The database design will account for multiple provider types, including dentists and dental hygienists. Store provider types and their standard requirement templates separately from each provider's actual checklist. Initialize a provider's checklist from their type's templates, then retain that provider's own statuses, dates, and review history. Changing a template must not silently add, remove, or change existing checklist entries.
+
+Individual providers may need exceptions to their type's standard checklist, but the exception policy is not yet determined. Keep provider checklist entries separate from templates so the policy can be settled later. The persistence and manager-review slice will not add exception controls or automatically create requirements from free-text updates. Validate each type's actual requirements with the health center contact rather than assuming that different types share the same checklist.
+
 ### Incomplete Dates
 
 For a date with a month and day but no year, infer the most recent valid occurrence on or before the provider's proposed start date. For a day alone, such as "on the 18th," infer the most recent valid occurrence of that day on or before the proposed start date. For example, a January 15, 2027 start implies October 22, 2026 for "October 22," and December 18, 2026 for "on the 18th."
@@ -103,6 +109,8 @@ Inferred dates will show the original wording, the inferred date, an explanation
 The database will persist the following linked records:
 
 - **Providers:** Identity, provider type, and proposed start date.
+- **Provider Types:** Named types such as Dentist and Dental Hygienist.
+- **Requirement Templates:** Standard checklist entries associated with a provider type.
 - **New-Hire Requirements:** Statuses and deadlines associated with each provider.
 - **Updates:** Original free-text messages associated with each provider.
 - **LLM Suggestions:** Proposed changes generated from each update.
@@ -163,7 +171,8 @@ The initial prototype will exclude:
 
 ### Project decisions
 
-- Which provider types and requirements should be included?
+- Which requirements should each provider type include? The schema will support multiple types; the initial persistence/review fixture remains the existing synthetic dentist.
+- Do individual providers need checklist exceptions, and how should those exceptions be reviewed and recorded? This remains undecided.
 - What statuses and deadline rules apply?
 - Anyone can propose updates; a manager approves checklist changes. Use simulated roles for the prototype rather than actual sign-in.
 - Valid suggestions will be shown alongside warnings for unknown or non-applicable requirements; no applicable suggestions will produce an insufficient-information response.
@@ -182,4 +191,4 @@ The biggest uncertainty is how to model onboarding requirements and statuses acc
 
 I will review a typical provider onboarding workflow with my contact to identify the most important requirements, their possible statuses, and how they differ by provider type. I will also ask the manager to evaluate several synthetic HR/credentialing updates to determine whether they reflect realistic communications.
 
-Based on that feedback, I may limit version one to one provider type (e.g., dentists) and a small set of common requirements. The investigation will also help determine whether the synthetic updates provide enough detail for reliable LLM extraction.
+The initial persistence/review fixture will remain the existing synthetic dentist and its small checklist, while the schema supports additional types such as dental hygienists. Validate their requirements before adding more fixtures. The investigation will also help determine whether the synthetic updates provide enough detail for reliable LLM extraction and whether individual checklist exceptions are needed.
