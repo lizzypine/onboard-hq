@@ -163,6 +163,35 @@ def test_lost_analysis_response_reuses_request_without_creating_second_update(
     assert len(history) == 1
 
 
+
+def test_saved_analysis_with_failed_refresh_reuses_request_on_retry(
+    page, app_server, seeded_provider
+):
+    page.goto(app_server.url)
+    expect(drug_row(page)).to_contain_text("Scheduled")
+
+    def fail_refresh(route):
+        route.fulfill(status=503, json={"detail": "Saved data is unavailable."})
+
+    page.route("**/providers/*/updates", fail_refresh)
+    page.get_by_label("Original update").fill("Drug screening completed.")
+    analyze = page.get_by_role("button", name="Analyze update", exact=True)
+    analyze.click()
+    expect(page.locator("#request-status")).not_to_have_text("Analyzing update…")
+    expect(analyze).to_be_enabled()
+    saved_status = page.locator("#request-status").inner_text()
+    page.unroute("**/providers/*/updates", fail_refresh)
+    analyze.click()
+    expect(page.locator("#request-status")).to_contain_text(
+        "Update and suggestions saved"
+    )
+    history = page.request.get(
+        app_server.url + f"/providers/{seeded_provider.id}/updates"
+    ).json()
+    assert len(history) == 1
+    assert "Update saved, but the view could not refresh" in saved_status
+
+
 def test_stale_manager_view_refreshes_after_conflict_and_can_reject_old_proposal(
     page, app_server, seeded_provider
 ):

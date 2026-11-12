@@ -241,15 +241,19 @@ document.getElementById("update-form").addEventListener("submit", async event =>
   if (!state.pending || state.pending.key !== key) state.pending = {key, id: crypto.randomUUID()};
   setBusy(true);
   status.textContent = "Analyzing update…";
+  let saved = false;
   try {
     await api("/updates/analyze", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({provider_id: state.provider.id, request_id: state.pending.id, update_text: bodyText})});
-    state.pending = null;
+    saved = true;
     await loadState();
+    state.pending = null;
     status.textContent = "Update and suggestions saved. Awaiting manager review.";
   } catch (error) {
     if (error.savedUpdateId) state.pending = null;
-    try { await loadState(); } catch { /* Preserve the last known view and the visible error. */ }
-    status.textContent = error.message;
+    if (!saved) {
+      try { await loadState(); } catch { /* Preserve the last known view and the visible error. */ }
+    }
+    status.textContent = saved ? "Update saved, but the view could not refresh. Refresh data or retry this submission." : error.message;
   } finally { setBusy(false); }
 });
 

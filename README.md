@@ -39,8 +39,14 @@ connection and `DATABASE_URL_UNPOOLED` to its direct connection in `.env`.
 Run schema migrations explicitly, with PostgreSQL 18's tools on PATH:
 
 ```sh
-PATH="$(brew --prefix postgresql@18)/bin:.superpowers/bin:$PATH" dbmate -e DATABASE_URL_UNPOOLED migrate
+PATH="$(brew --prefix postgresql@18)/bin:.superpowers/bin:$PATH" dbmate --no-dump-schema -e DATABASE_URL_UNPOOLED migrate
 ```
+
+Disable dbmate's automatic schema dump for credentialed connections: its dump
+command passes the connection URL to `pg_dump` as a process argument. The committed
+`db/schema.sql` snapshot is generated from a passwordless disposable local database
+using the same migrations and PostgreSQL 18 tools. Regenerate it there after schema
+changes; keep Neon credentials in the environment only.
 
 The schema has seven application tables. Seed the existing synthetic provider
 explicitly with `uv run --env-file .env python -m app.seed`. Seeding again preserves
