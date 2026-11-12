@@ -14,7 +14,11 @@ The canonical project spec is `docs/proposal.md`. `docs/proposal-v2.pdf` contain
 - Include a synthetic message mentioning two providers when evaluating provider scoping. Ethan suggested this harder case, but its expected behavior is not yet specified; settle it in the spec before implementing support for updates about multiple providers.
 - Policy/checklist documents retrieved by provider type, with citations to policy lines, are an investigation option from Ethan's feedback. Document retrieval and RAG are not committed version-one requirements.
 - Ethan suggested comparing the time to answer "what's still outstanding for Dr. X?" using the current process versus the app. Keep dashboard correctness checks; investigate this additional value measure with the health center contact before setting evaluation targets.
-- Version-one permissions remain undecided. Ethan suggested either a single role or anyone proposing with a manager approving. Resolve that choice in the spec before implementing permissions; the sketch's question about restricting updates to HR/credentialing is not a requirement.
+- Anyone can propose updates; only a manager can approve changes. For this prototype, use a clearly labeled simulated Proposer/Manager role switch rather than sign-in. Enforce the selected role in the server's review operation, while making clear that a simulated role is not real access control.
+- Persist application records in Neon PostgreSQL using `DATABASE_URL` from the environment. Manage schema changes with dbmate SQL migrations. Keep database credentials in `.env`, and use placeholder values only in `.env.example`. Automated database tests must use a separate test database rather than the configured Neon application database.
+- Use Pydantic for request/response validation and structured model output. Keep authorization and business rules in plain Python and relational integrity constraints in PostgreSQL.
+- The persistence and manager-review slice requires automated unit, PostgreSQL integration, and real-browser end-to-end tests, run locally and in CI. Use `TestModel` with real model requests disabled in every layer; never point automated tests at the Neon application database.
+- Local/cloud semantic routing is possible future work using OpenCode at `opencode.ai` (referred to as `opencode-ai`). Investigate its integration and the routing policy before adopting it; do not add routing or change the current model gateway as part of persistence and review.
 
 ## Layout
 
