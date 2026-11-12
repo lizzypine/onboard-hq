@@ -11,3 +11,6 @@ wheels/
 
 #Environment file
 .env
+
+# Visual companion and plan-execution runtime files
+.superpowers/

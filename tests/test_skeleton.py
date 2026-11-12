@@ -17,7 +17,7 @@ def test_page_loads_with_a_form() -> None:
     assert re.search(r"<form\b", response.text, re.IGNORECASE) is not None
 
 
-def test_update_endpoint_returns_declared_top_level_fields() -> None:
+def test_update_endpoint_returns_declared_top_level_fields(client: TestClient) -> None:
     request = {
         "provider": {
             "provider_id": "kekoa-ejemplo",
@@ -35,8 +35,7 @@ def test_update_endpoint_returns_declared_top_level_fields() -> None:
         "update_text": "Hawaii dental license received.",
     }
 
-    with override_allow_model_requests(False), TestClient(app) as client:
-        response = client.post("/updates/analyze", json=request)
+    response = client.post("/updates/analyze", json=request)
 
     assert response.status_code == 200
     assert set(response.json()) == set(AnalyzeUpdateResponse.model_fields)
