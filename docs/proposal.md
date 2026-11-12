@@ -104,6 +104,8 @@ The database will persist the following linked records:
 
 Each provider can have multiple requirements and updates, and each update can generate multiple suggestions. All records will remain available after restarting the application.
 
+Use Neon PostgreSQL for application persistence, configured through `DATABASE_URL` in the environment. Manage the schema with dbmate SQL migrations. The initial Onboard HQ database is empty; the migrations will establish its tables. Keep credentials in the ignored `.env` file and commit only placeholders in `.env.example`. Automated database tests will use a separate PostgreSQL test database.
+
 Persistence remains part of the eventual application. The first model-connected feature will not save providers, updates, suggestions, or date confirmations; refreshing the page will reset its temporary state.
 
 ## Searchable Text
@@ -115,6 +117,8 @@ Semantic search and retrieval-augmented generation (RAG) are outside the first m
 ## Human Review
 
 Users will see the original update alongside proposed changes and supporting text. They can approve, correct, or reject each suggestion. Only approved changes will update requirement statuses. Original messages and review decisions will be retained.
+
+Anyone can propose an update. Only a manager can approve changes that update the checklist. For the prototype, a clearly labeled simulated Proposer/Manager role switch will represent those roles; actual sign-in and authenticated role enforcement are outside this slice.
 
 The first model-connected feature will include an editable date field and a Confirm date button for each inferred date. Confirmation will apply only to that suggested date in the current page, without approving a status change or saving a record. Editing a date will clear its confirmation, and submitting another update will reset confirmations. General suggestion approval, correction, rejection, and applying checklist status changes remain outside this feature.
 
@@ -145,11 +149,13 @@ The initial prototype will exclude:
 
 - Which provider types and requirements should be included?
 - What statuses and deadline rules apply?
+- Anyone can propose updates; a manager approves checklist changes. Use simulated roles for the prototype rather than actual sign-in.
 - Valid suggestions will be shown alongside warnings for unknown or non-applicable requirements; no applicable suggestions will produce an insufficient-information response.
 
 ### Technical questions
 
 - Use Pydantic AI structured output through the configured OpenAI-compatible gateway; the model identifier is deployment configuration supplied through `LLM_MODEL`.
+- Use Neon PostgreSQL, with `DATABASE_URL` supplied through the environment, and dbmate SQL migrations for schema changes.
 - How should semantic search work?
 - How should the application be deployed?
 
