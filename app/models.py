@@ -1,9 +1,10 @@
 """Validated application records and transport contracts."""
 
-from datetime import date
+from datetime import date, datetime
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 
 class Requirement(BaseModel):
@@ -72,3 +73,53 @@ def to_provider_context(provider: StoredProvider) -> ProviderContext:
             for r in provider.requirements
         ],
     )
+
+
+NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+FailureCategory = Literal["configuration", "timeout", "model"]
+
+
+class SubmitUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    provider_id: UUID
+    request_id: UUID
+    update_text: NonBlank
+
+
+class ReviewDecision(BaseModel):
+    id: UUID
+    suggestion_id: UUID
+    outcome: Literal["approved", "corrected", "rejected"]
+    previous_status: str
+    previous_scheduled_date: date | None
+    applied_status: str | None
+    applied_scheduled_date: date | None
+    reviewer_role: Literal["manager"]
+    reviewed_at: datetime
+
+
+class SavedSuggestion(SuggestedChange):
+    id: UUID
+    requirement_id: UUID
+    requirement_version: int = Field(ge=0)
+    decision: ReviewDecision | None = None
+
+
+class SavedUpdate(BaseModel):
+    id: UUID
+    request_id: UUID
+    provider_id: UUID
+    update_text: str
+    provider_snapshot: StoredProvider
+    processing_state: Literal["processing", "completed", "failed"]
+    message: str
+    suggestions: list[SavedSuggestion]
+    ambiguities: list[str]
+    failure_category: FailureCategory | None
+    created_at: datetime
+    completed_at: datetime | None
+
+
+class UpdateClaim(BaseModel):
+    created: bool
+    update: SavedUpdate

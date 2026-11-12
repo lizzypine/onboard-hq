@@ -12,6 +12,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from app.models import (
     AnalyzeUpdateRequest,
     AnalyzeUpdateResponse,
+    NonBlank,
     ProviderContext,
     Requirement,
     SuggestedChange,
@@ -43,9 +44,9 @@ class MentionedDate(BaseModel):
 
 
 class ExtractedSuggestion(BaseModel):
-    requirement: str
-    proposed_status: str
-    supporting_text: str
+    requirement: NonBlank
+    proposed_status: NonBlank
+    supporting_text: NonBlank
     date: MentionedDate | None = None
 
 

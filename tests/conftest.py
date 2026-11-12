@@ -68,10 +68,16 @@ def extraction_model() -> TestModel:
 
 
 @pytest.fixture
-def client(extraction_model: TestModel) -> Iterator[TestClient]:
+def client(
+    extraction_model: TestModel,
+    db_url: str,
+    seeded_provider: StoredProvider,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Iterator[TestClient]:
+    monkeypatch.setenv("DATABASE_URL", db_url)
     previous = main.app.dependency_overrides.copy()
-    main.app.dependency_overrides[main.get_extraction_agent] = lambda: build_agent(
-        extraction_model
+    main.app.dependency_overrides[main.get_agent_factory] = lambda: (
+        lambda: build_agent(extraction_model)
     )
     try:
         with TestClient(main.app) as test_client:

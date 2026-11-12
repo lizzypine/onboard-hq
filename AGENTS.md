@@ -30,6 +30,8 @@ The canonical project spec is `docs/proposal.md`. `docs/proposal-v2.pdf` contain
 - `app/models.py`: shared Pydantic context, stored-record, and HTTP contracts.
 - `app/repository/providers.py`: PostgreSQL provider reads and template-based checklist initialization; repository transaction helpers are in `app/repository/__init__.py`.
 - `app/seed.py`: explicit, repeatable synthetic development seed. Never run at application startup.
+- `app/repository/updates.py`: request claims, captured provider context, and saved suggestions/history.
+- `app/reviews.py`: saved analysis/review orchestration. Release database connections before model calls.
 - `db/migrations/`: dbmate SQL schema changes; `db/schema.sql` is the generated schema-only snapshot.
 - `app/rules/__init__.py`: compatibility exports for plain Python rules.
 - `app/rules/scope.py`: requirement scope and empty-suggestion validation. No FastAPI, no LLM client.

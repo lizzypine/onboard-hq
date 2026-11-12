@@ -12,6 +12,7 @@ from psycopg import ProgrammingError, sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 ROOT = Path(__file__).resolve().parents[1]
+APPLICATION_DATABASE_URL = os.environ.get("DATABASE_URL")
 
 
 def _identity(options):
@@ -50,12 +51,12 @@ def configured_test_url() -> str:
         raise ValueError(
             "Run bash scripts/test.sh uv run pytest to configure PostgreSQL tests."
         )
-    require_disposable_database(value, os.environ.get("DATABASE_URL"))
+    require_disposable_database(value, APPLICATION_DATABASE_URL)
     return value
 
 
 def migrate_test_database(url: str) -> None:
-    require_disposable_database(url, os.environ.get("DATABASE_URL"))
+    require_disposable_database(url, APPLICATION_DATABASE_URL)
     result = subprocess.run(
         [str(ROOT / ".superpowers/bin/dbmate"), "--no-dump-schema", "migrate"],
         cwd=ROOT,

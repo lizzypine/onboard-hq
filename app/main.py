@@ -5,22 +5,10 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic_ai import Agent
-from pydantic_ai.exceptions import (
-    ModelAPIError,
-    ModelTimeoutError,
-    UnexpectedModelBehavior,
-)
 
-from app.agent import (
-    AgentConfigurationError,
-    AnalyzeUpdateRequest,
-    AnalyzeUpdateResponse,
-    ExtractionResult,
-    build_agent,
-)
+from app.agent import build_agent
 from app.database import (
     DatabaseConfigurationError,
     DatabasePool,
@@ -28,10 +16,11 @@ from app.database import (
     create_pool,
     database_url,
 )
-from app.models import ProviderSummary, StoredProvider
+from app.models import ProviderSummary, SavedUpdate, StoredProvider, SubmitUpdateRequest
 from app.repository import RecordNotFound
 from app.repository.providers import ProviderRepository
-from app.updates import process_update
+from app.repository.updates import UpdateConflict, UpdateRepository
+from app.reviews import AgentFactory, submit_update
 
 
 @asynccontextmanager
@@ -51,11 +40,11 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
             await pool.close()
 
 
-app = FastAPI(title="Onboard HQ", lifespan=lifespan)
+router = APIRouter()
 
 
-def get_pool() -> DatabasePool:
-    pool: DatabasePool | None = getattr(app.state, "pool", None)
+def get_pool(request: Request) -> DatabasePool:
+    pool: DatabasePool | None = getattr(request.app.state, "pool", None)
     if pool is None:
         raise HTTPException(503, "Database is not configured.")
     return pool
@@ -67,7 +56,6 @@ def get_repository(
     return ProviderRepository(pool)
 
 
-@app.exception_handler(DatabaseUnavailable)
 async def database_error(_request: Request, _error: Exception) -> JSONResponse:
     return JSONResponse(
         status_code=503,
@@ -77,19 +65,18 @@ async def database_error(_request: Request, _error: Exception) -> JSONResponse:
     )
 
 
-@app.exception_handler(RecordNotFound)
 async def missing_record(_request: Request, _error: Exception) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": "Record not found."})
 
 
-@app.get("/providers", response_model=list[ProviderSummary])
+@router.get("/providers", response_model=list[ProviderSummary])
 async def providers(
     repository: Annotated[ProviderRepository, Depends(get_repository)],
 ) -> list[ProviderSummary]:
     return await repository.list_providers()
 
 
-@app.get("/providers/{provider_id}", response_model=StoredProvider)
+@router.get("/providers/{provider_id}", response_model=StoredProvider)
 async def provider(
     provider_id: UUID,
     repository: Annotated[ProviderRepository, Depends(get_repository)],
@@ -132,7 +119,7 @@ PAGE = """<!doctype html>
   <h1>Onboard HQ</h1>
   <p>Provider onboarding dashboard</p>
   <p><strong>Prototype:</strong> Synthetic provider data. Updates are sent for model
-     analysis; suggestions and date confirmations are not saved.</p>
+     analysis. Updates and suggestions are saved; date confirmation alone does not approve a status.</p>
 
   <section aria-labelledby="provider-heading">
     <h2 id="provider-heading">1. Select a provider</h2>
@@ -173,19 +160,9 @@ PAGE = """<!doctype html>
   </section>
 </main>
 <script>
-  const provider = {
-    provider_id: "kekoa-ejemplo",
-    name: "Dr. Kekoa Ejemplo",
-    provider_type: "Dentist",
-    proposed_start_date: "2026-12-01",
-    requirements: [
-      {name: "Offer letter", status: "Signed", deadline: null},
-      {name: "Hawaii dental license", status: "Received", deadline: null},
-      {name: "Drug screening", status: "Scheduled", deadline: null},
-      {name: "State NED license", status: "Outstanding", deadline: null},
-      {name: "Insurance credentialing", status: "Pending", deadline: null}
-    ]
-  };
+  let provider;
+  let submissionKey = null;
+  let requestId = null;
 
   function appendText(parent, tag, text) {
     const element = document.createElement(tag);
@@ -195,12 +172,31 @@ PAGE = """<!doctype html>
   }
 
   const requirements = document.getElementById("requirements");
-  for (const requirement of provider.requirements) {
-    const row = document.createElement("tr");
-    appendText(row, "td", requirement.name);
-    appendText(row, "td", requirement.status);
-    appendText(row, "td", requirement.deadline ?? "Not set");
-    requirements.append(row);
+  const providerSelect = document.getElementById("provider");
+  async function refreshProvider() {
+    const response = await fetch("/providers/" + providerSelect.value);
+    if (!response.ok) throw new Error("Unable to load stored checklist.");
+    provider = await response.json();
+    requirements.replaceChildren();
+    for (const requirement of provider.requirements) {
+      const row = document.createElement("tr");
+      appendText(row, "td", requirement.name);
+      appendText(row, "td", requirement.status);
+      appendText(row, "td", requirement.deadline ?? "Not set");
+      requirements.append(row);
+    }
+  }
+  async function loadProvider() {
+    const response = await fetch("/providers");
+    if (!response.ok) throw new Error("Unable to load providers.");
+    const providers = await response.json();
+    providerSelect.replaceChildren();
+    for (const item of providers) {
+      const option = appendText(providerSelect, "option", item.name);
+      option.value = item.id;
+    }
+    if (!providers.length) throw new Error("No providers found. Load synthetic seed data.");
+    await refreshProvider();
   }
 
   const form = document.getElementById("update-form");
@@ -260,20 +256,30 @@ PAGE = """<!doctype html>
     if (submitButton.disabled) return;
     const updateText = document.getElementById("update-text").value;
     submitButton.disabled = true;
+    providerSelect.disabled = true;
     status.textContent = "Analyzing update...";
     results.replaceChildren();
     let failureMessage = "Unable to analyze update. Please try again.";
     try {
+      await ready;
+      if (!provider) throw new Error("No stored provider is available.");
+      const key = JSON.stringify([provider.id, updateText]);
+      if (submissionKey !== key || !requestId) {
+        submissionKey = key;
+        requestId = crypto.randomUUID();
+      }
       const response = await fetch(form.action, {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({provider, update_text: updateText})
+        body: JSON.stringify({provider_id: provider.id, request_id: requestId, update_text: updateText})
       });
       const data = await response.json();
       if (!response.ok) {
         if (typeof data.detail === "string") failureMessage = data.detail;
+        else if (data.detail?.message) failureMessage = data.detail.message;
         throw new Error(failureMessage);
       }
+      requestId = null;
       appendText(results, "h3", "Original update");
       appendText(results, "p", updateText);
       appendText(results, "p", data.message);
@@ -285,13 +291,22 @@ PAGE = """<!doctype html>
         }
       }
       status.textContent = data.suggestions.length ?
-        "Suggestions displayed. Nothing was saved." : data.message;
+        "Update and suggestions saved. Checklist statuses are unchanged." : data.message;
     } catch {
       results.replaceChildren();
       status.textContent = failureMessage;
     } finally {
       submitButton.disabled = false;
+      providerSelect.disabled = false;
     }
+  });
+  providerSelect.addEventListener("change", () => {
+    results.replaceChildren();
+    refreshProvider().catch(() => { status.textContent = "Unable to load stored checklist."; });
+  });
+  const ready = loadProvider().catch((error) => {
+    status.textContent = error.message;
+    submitButton.disabled = true;
   });
 </script>
 </body>
@@ -299,31 +314,64 @@ PAGE = """<!doctype html>
 """
 
 
-@app.get("/", response_class=HTMLResponse)
+@router.get("/", response_class=HTMLResponse)
 async def index() -> str:
     """Display the synthetic provider dashboard and update form."""
     return PAGE
 
 
-def get_extraction_agent() -> Agent[None, ExtractionResult]:
-    """Create the configured agent only when analysis is requested."""
-    try:
-        return build_agent()
-    except AgentConfigurationError:
-        raise HTTPException(503, "Model analysis is not configured.") from None
+def get_agent_factory() -> AgentFactory:
+    """Construct the configured agent only after persisting a claimed update."""
+    return build_agent
 
 
-@app.post("/updates/analyze", response_model=AnalyzeUpdateResponse)
+@router.post("/updates/analyze", response_model=SavedUpdate)
 async def analyze_update(
-    request: AnalyzeUpdateRequest,
-    agent: Annotated[Agent[None, ExtractionResult], Depends(get_extraction_agent)],
-) -> AnalyzeUpdateResponse:
-    """Analyze an update and translate model failures into safe HTTP errors."""
-    try:
-        return await process_update(request, agent)
-    except (TimeoutError, ModelTimeoutError):
-        raise HTTPException(504, "Analysis timed out. Please try again.") from None
-    except (ModelAPIError, UnexpectedModelBehavior):
+    request: SubmitUpdateRequest,
+    factory: Annotated[AgentFactory, Depends(get_agent_factory)],
+    pool: Annotated[DatabasePool, Depends(get_pool)],
+) -> SavedUpdate:
+    saved = await submit_update(UpdateRepository(pool), request, factory)
+    if saved.failure_category is not None:
+        code = {"configuration": 503, "timeout": 504, "model": 502}[
+            saved.failure_category
+        ]
         raise HTTPException(
-            502, "Unable to analyze update. Please try again."
-        ) from None
+            code, {"message": saved.message, "update_id": str(saved.id)}
+        )
+    return saved
+
+
+@router.get("/updates/{update_id}", response_model=SavedUpdate)
+async def saved_update(
+    update_id: UUID, pool: Annotated[DatabasePool, Depends(get_pool)]
+) -> SavedUpdate:
+    return await UpdateRepository(pool).get(update_id)
+
+
+@router.get("/providers/{provider_id}/updates", response_model=list[SavedUpdate])
+async def saved_updates(
+    provider_id: UUID, pool: Annotated[DatabasePool, Depends(get_pool)]
+) -> list[SavedUpdate]:
+    return await UpdateRepository(pool).list_for_provider(provider_id)
+
+
+async def update_conflict(_request: Request, _error: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={
+            "detail": "Request is already processing or its input has changed. Refresh saved history."
+        },
+    )
+
+
+def create_app() -> FastAPI:
+    application = FastAPI(title="Onboard HQ", lifespan=lifespan)
+    application.include_router(router)
+    application.add_exception_handler(DatabaseUnavailable, database_error)
+    application.add_exception_handler(RecordNotFound, missing_record)
+    application.add_exception_handler(UpdateConflict, update_conflict)
+    return application
+
+
+app = create_app()
