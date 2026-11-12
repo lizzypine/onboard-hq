@@ -106,6 +106,37 @@ Use actual calendar dates when resolving incomplete dates. Preserve fully specif
 
 Inferred dates will show the original wording, the inferred date, an explanation referencing the proposed start date, and an indication that user approval is required.
 
+### Status and Deadline Monitoring
+
+Derive completion from each requirement's saved status using rules specific to that requirement. Keep the existing manager approval workflow; do not introduce a separate completion field or let an unapproved suggestion change monitoring results. Seeded initial statuses are also valid monitoring inputs.
+
+For the synthetic Dentist checklist, the following statuses mean finished:
+
+| Requirement | Finished status |
+| --- | --- |
+| Offer letter | Signed |
+| Hawaii dental license | Received |
+| Drug screening | Completed |
+| State NED license | Received |
+| Insurance credentialing | Approved |
+
+These are prototype rules for synthetic examples, to be validated with the health center contact before applying them to actual workflows. Preserve the saved status wording. Match configured status values after trimming surrounding whitespace and ignoring case; unfamiliar statuses, requirements, or provider types show **Needs review** instead of a guessed completion result.
+
+An unfinished requirement is overdue when its saved deadline is before the current Hawaii calendar date. A deadline today is due today, not overdue. A finished requirement receives no overdue warning even if its deadline has passed. A missing deadline produces no overdue warning. Keep appointment/event dates and proposed start dates separate from deadlines. This use of today's date for monitoring does not change the proposed-start-date reference for incomplete-date inference.
+
+When completion needs review and the deadline has passed, show **Deadline passed — needs review**. Do not count that uncertain item as confirmed overdue. Show Finished, Remaining, Overdue, and Needs review counts for the selected provider. Remaining includes all requirements not known to be finished, including uncertain items; Overdue and Needs review are subsets of Remaining. Monitoring reflects a labeled as-of date and is recomputed when server data is loaded or refreshed.
+
+Use the existing fictional dentist for these acceptance scenarios:
+
+| Requirement | Saved status | Deadline | Expected result |
+| --- | --- | --- | --- |
+| Offer letter | Signed | Yesterday | Finished; no overdue warning |
+| Drug screening | Scheduled | Next week | Outstanding |
+| Drug screening | Completed | Yesterday | Finished; no overdue warning |
+| Insurance credentialing | Incomplete | Yesterday | Outstanding and overdue |
+
+Keep monitoring read-only. The mockup's dates are fictional test values; do not infer, populate, or change saved deadlines to make a demonstration show overdue items. Deadline entry/editing, additional provider-type rules, and readiness judgments are separate work.
+
 ## Saved Records
 
 The database will persist the following linked records:
@@ -164,6 +195,8 @@ Run all three layers in local verification and CI. No automated test calls a rea
 
 Use pytest with real isolated PostgreSQL for integration tests and Playwright for browser tests. The browser test server substitutes `TestModel` and disables real model requests in its own process. Cover saved state after app restart, lost-response retries, stale/concurrent review, correction/rejection, date confirmation, and safe rendering of supporting text.
 
+For status and deadline monitoring, turn the four synthetic acceptance scenarios into unit tests. Add missing/today/future/past deadline boundaries, unfamiliar statuses, completion reversals, and provider-type boundaries. Integration tests must derive monitoring from stored records; browser tests must verify counts and labels after manager approval and refresh. Use a controlled clock and fictional deadlines in the isolated test database, never the Neon application database.
+
 ## Outside Version One
 
 The initial prototype will exclude:
@@ -179,7 +212,7 @@ The initial prototype will exclude:
 
 - Which requirements should each provider type include? The schema will support multiple types; the initial persistence/review fixture remains the existing synthetic dentist.
 - Do individual providers need checklist exceptions, and how should those exceptions be reviewed and recorded? This remains undecided.
-- What statuses and deadline rules apply?
+- Which additional statuses, provider-type completion rules, and deadline-entry rules apply? The synthetic Dentist's initial completion mappings and monitoring behavior are specified under **Data Use > Status and Deadline Monitoring**; validate real workflow rules with the health center contact.
 - Anyone can propose updates; a manager approves checklist changes. Use simulated roles for the prototype rather than actual sign-in.
 - Valid suggestions will be shown alongside warnings for unknown or non-applicable requirements; no applicable suggestions will produce an insufficient-information response.
 
