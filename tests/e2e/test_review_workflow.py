@@ -7,7 +7,7 @@ import pytest
 from playwright.sync_api import expect
 from psycopg.types.json import Jsonb
 
-from tests.database import ROOT, configured_test_url, disposable_database
+from tests.database import configured_test_url, disposable_database
 
 
 def propose(page, app_server, text="Drug screening completed."):
@@ -46,7 +46,7 @@ def test_manager_approval_survives_refresh_and_server_restart(page, app_server):
 
 
 def test_manager_can_correct_date_and_confirmation_resets_after_editing(
-    page, app_server
+    page, app_server, tmp_path
 ):
     app_server.restart("inferred")
     propose(page, app_server, "Drug screening on the 18th.")
@@ -61,8 +61,7 @@ def test_manager_can_correct_date_and_confirmation_resets_after_editing(
         card.get_by_role("button", name="Approve with corrections", exact=True)
     ).to_be_disabled()
     confirmation.check()
-    screenshot_dir = ROOT / ".superpowers/sdd/2026-11-11-persistent-review"
-    screenshot_dir.mkdir(parents=True, exist_ok=True)
+    screenshot_dir = tmp_path
     page.screenshot(path=screenshot_dir / "manager-desktop.png", full_page=True)
     page.set_viewport_size({"width": 390, "height": 844})
     page.screenshot(path=screenshot_dir / "manager-narrow.png", full_page=True)
@@ -164,8 +163,9 @@ def test_lost_analysis_response_reuses_request_without_creating_second_update(
 
 
 
+@pytest.mark.parametrize("endpoint", ["updates", "dashboard"])
 def test_saved_analysis_with_failed_refresh_reuses_request_on_retry(
-    page, app_server, seeded_provider
+    page, app_server, seeded_provider, endpoint
 ):
     page.goto(app_server.url)
     expect(drug_row(page)).to_contain_text("Scheduled")
@@ -173,14 +173,15 @@ def test_saved_analysis_with_failed_refresh_reuses_request_on_retry(
     def fail_refresh(route):
         route.fulfill(status=503, json={"detail": "Saved data is unavailable."})
 
-    page.route("**/providers/*/updates", fail_refresh)
+    pattern = "**/providers/*/" + endpoint
+    page.route(pattern, fail_refresh)
     page.get_by_label("Original update").fill("Drug screening completed.")
     analyze = page.get_by_role("button", name="Analyze update", exact=True)
     analyze.click()
     expect(page.locator("#request-status")).not_to_have_text("Analyzing update…")
     expect(analyze).to_be_enabled()
     saved_status = page.locator("#request-status").inner_text()
-    page.unroute("**/providers/*/updates", fail_refresh)
+    page.unroute(pattern, fail_refresh)
     analyze.click()
     expect(page.locator("#request-status")).to_contain_text(
         "Update and suggestions saved"

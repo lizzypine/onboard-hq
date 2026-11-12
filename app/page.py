@@ -40,10 +40,20 @@ PAGE = """<!doctype html>
     .review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     .confirmation { display: flex; gap: 8px; align-items: center; margin-top: 14px; }
     .notice { color: #425d6b; }
+    .monitoring-counts { display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 12px; margin: 16px 0; }
+    .monitoring-counts div { background: #f1f6f8; border: 1px solid #dce5ea;
+      border-radius: 6px; padding: 12px; }
+    .monitoring-counts dt { color: #425d6b; }
+    .monitoring-counts dd { font-size: 1.6rem; font-weight: 700; margin: 4px 0 0; }
+    .indicator { font-weight: 600; }
+    .indicator.finished { color: #236044; }
+    .indicator.overdue, .indicator.needs_review { color: #82401a; }
     #request-status { min-height: 1.5em; }
     @media (max-width: 600px) {
       main { padding: 14px; } section { padding: 16px; }
       .review-grid { grid-template-columns: 1fr; }
+      .monitoring-counts { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
   <script src="/static/onboarding.js" defer></script>
@@ -70,10 +80,24 @@ PAGE = """<!doctype html>
   </section>
   <section aria-labelledby="checklist-heading">
     <h2 id="checklist-heading">2. Onboarding checklist</h2>
+    <div id="monitoring-summary" role="region" aria-label="Monitoring summary" hidden>
+      <dl class="monitoring-counts">
+        <div><dt>Finished</dt><dd aria-label="Finished" id="count-finished"></dd></div>
+        <div><dt>Remaining</dt><dd aria-label="Remaining" id="count-remaining"></dd></div>
+        <div><dt>Overdue</dt><dd aria-label="Overdue" id="count-overdue"></dd></div>
+        <div><dt>Needs review</dt><dd aria-label="Needs review" id="count-needs_review"></dd></div>
+      </dl>
+      <p id="monitoring-as-of" class="notice"></p>
+      <p class="notice">Remaining includes uncertain items. Needs review means the saved
+        status, requirement, or provider type has no recognized completion rule;
+        it does not mean a suggestion is awaiting approval.</p>
+    </div>
+    <p id="empty-checklist" hidden>No checklist requirements are saved for this provider.</p>
     <div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable checklist">
       <table aria-label="Onboarding checklist">
         <thead><tr><th scope="col">Requirement</th><th scope="col">Status</th>
-          <th scope="col">Requirement date</th><th scope="col">Deadline</th></tr></thead>
+          <th scope="col">Requirement date</th><th scope="col">Deadline</th>
+          <th scope="col">Monitoring</th></tr></thead>
         <tbody id="requirements"></tbody>
       </table>
     </div>

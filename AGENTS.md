@@ -29,6 +29,9 @@ The canonical project spec is `docs/proposal.md`. `docs/proposal-v2.pdf` contain
 - `app/updates.py`: extraction, scope filtering, and date-resolution orchestration. No HTTP or UI code.
 - `app/database.py`: environment configuration and PostgreSQL connection lifecycle. No routes or model calls.
 - `app/models.py`: shared Pydantic context, stored-record, and HTTP contracts.
+- `app/monitoring_models.py`: derived dashboard contracts, separate from stored provider/context snapshots.
+- `app/monitoring.py`: Hawaii clock boundary and dashboard loading from one saved provider/checklist read.
+- `app/rules/monitoring.py`: pure completion, deadline, and count rules with an explicit as-of date. No clock or I/O.
 - `app/repository/providers.py`: PostgreSQL provider reads and template-based checklist initialization; repository transaction helpers are in `app/repository/__init__.py`.
 - `app/seed.py`: explicit, repeatable synthetic development seed. Never run at application startup.
 - `app/repository/updates.py`: request claims, captured provider context, and saved suggestions/history.
