@@ -42,6 +42,9 @@ Synthetic sample inputs:
 | "Still waiting on his NED license." | NED license: Outstanding |
 | "Offer letter signed and license received." | Two proposed changes |
 | "Drug screen scheduled, date unknown." | Scheduled; flag missing date |
+| "Drug screen will happen next Tuesday." | In the first model-connected feature, flag unsupported relative-weekday wording and leave the date unset, as specified under **Data Use > Incomplete Dates**. |
+| "Actually the drug screen moved to the 29th." | Propose correcting the drug-screening date using the most recent valid 29th on or before the proposed start date, as specified under **Data Use > Incomplete Dates**. Leave it unset and warn if there is no reference start date. Apply changes only after human approval. |
+| "Credentialing was returned for missing info." | Credentialing: Incomplete |
 
 ## Expected Result and Value
 
