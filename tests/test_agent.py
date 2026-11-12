@@ -95,3 +95,39 @@ def test_invalid_gateway_configuration(
         agent_module.build_agent()
     assert "synthetic-secret" not in str(exc.value)
     assert gateway not in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "model_name,expected_effort",
+    [("gpt-6-luna", "none"), ("synthetic-model", None)],
+)
+def test_configured_model_sends_compatible_reasoning_with_structured_tools(
+    monkeypatch, update_request, model_name, expected_effort
+):
+    monkeypatch.setenv("LLM_API_TOKEN", "synthetic-token")
+    monkeypatch.setenv("LLM_API_GATEWAY", "https://gateway.example.invalid/v1")
+    monkeypatch.setenv("LLM_MODEL", model_name)
+    seen_settings = []
+
+    class SettingsModel(TestModel):
+        async def request(self, messages, model_settings, model_request_parameters):
+            seen_settings.append(model_settings or {})
+            return await super().request(
+                messages, model_settings, model_request_parameters
+            )
+
+    agent = agent_module.build_agent()
+    output = {
+        "suggestions": [
+            {
+                "requirement": "Drug screening",
+                "proposed_status": "Completed",
+                "supporting_text": "Drug screening completed.",
+            }
+        ]
+    }
+    with agent.override(model=SettingsModel(custom_output_args=output)):
+        result = asyncio.run(agent_module.extract_update(update_request, agent))
+    assert result.suggestions[0].proposed_status == "Completed"
+    assert len(seen_settings) == 1
+    assert seen_settings[0].get("openai_reasoning_effort") == expected_effort

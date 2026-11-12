@@ -76,6 +76,8 @@ The first model-connected feature will send the selected synthetic provider's co
 
 The application will use Pydantic AI with a model identifier supplied through `LLM_MODEL` and an OpenAI-compatible gateway supplied through `LLM_API_GATEWAY`. Its token will come from `LLM_API_TOKEN`. Configuration values will be read from the environment; credentials will not be included in the page or model prompt.
 
+When `LLM_MODEL` is `gpt-6-luna`, explicitly set reasoning effort to `none` for Chat Completions so the gateway accepts the function tools used for structured extraction. Other configured models keep their default reasoning settings. Keep the configured model and gateway; this compatibility setting introduces no routing or fallback.
+
 Model failures will produce a visible error rather than fixed placeholder suggestions. Automated tests will use `TestModel` with real model requests disabled.
 
 Use Pydantic validation for application request/response contracts and structured model output. Validate identifiers, roles, review decisions, nonblank text, and dates before application changes are applied. Keep business rules in plain Python and relational integrity constraints in PostgreSQL; model output must pass validation regardless of the model used.
