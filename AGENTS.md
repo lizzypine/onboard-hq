@@ -23,9 +23,19 @@ The canonical project spec is `docs/proposal.md`. `docs/proposal-v2.pdf` contain
 
 ## Layout
 
-- `app/main.py`: routes and the page. No business rules.
+- `app/main.py`: routes, dependency/lifecycle wiring, and HTTP error mapping. No business rules.
+- `app/page.py`: page markup; `app/static/onboarding.js`: browser data loading and review interactions.
 - `app/agent.py`: the Pydantic AI agent and output models.
 - `app/updates.py`: extraction, scope filtering, and date-resolution orchestration. No HTTP or UI code.
+- `app/database.py`: environment configuration and PostgreSQL connection lifecycle. No routes or model calls.
+- `app/models.py`: shared Pydantic context, stored-record, and HTTP contracts.
+- `app/repository/providers.py`: PostgreSQL provider reads and template-based checklist initialization; repository transaction helpers are in `app/repository/__init__.py`.
+- `app/seed.py`: explicit, repeatable synthetic development seed. Never run at application startup.
+- `app/repository/updates.py`: request claims, captured provider context, and saved suggestions/history.
+- `app/repository/reviews.py`: locked, atomic checklist changes and terminal review decisions.
+- `app/rules/review.py`: pure role, date-confirmation, and stale-version review rules.
+- `app/reviews.py`: saved analysis/review orchestration. Release database connections before model calls.
+- `db/migrations/`: dbmate SQL schema changes; `db/schema.sql` is the generated schema-only snapshot.
 - `app/rules/__init__.py`: compatibility exports for plain Python rules.
 - `app/rules/scope.py`: requirement scope and empty-suggestion validation. No FastAPI, no LLM client.
 - `app/rules/dates.py`: calendar date inference in plain Python. No FastAPI, no LLM client.
@@ -38,6 +48,7 @@ uv run fastapi dev app/main.py # run the app
 uv run ruff check             # lint
 uv run mypy                   # check types
 uv run pytest                 # run the tests
+bash scripts/test.sh uv run pytest # full suite with disposable local PostgreSQL
 ```
 
 ## Rules

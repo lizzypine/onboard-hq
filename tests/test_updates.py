@@ -2,7 +2,9 @@
 
 import asyncio
 import importlib
+from uuid import uuid4
 
+import psycopg
 import pytest
 from fastapi.testclient import TestClient
 from pydantic_ai.exceptions import (
@@ -15,6 +17,35 @@ from pydantic_ai.models.test import TestModel
 
 from app import main
 from app.agent import AnalyzeUpdateRequest, build_agent
+from app.seed import KEKOA_ID
+from tests.database import configured_test_url
+
+
+def _post_update(client, request):
+    """Prepare stored context for historical extraction cases, then use the real new API."""
+    with psycopg.connect(configured_test_url()) as conn:
+        conn.execute(
+            "UPDATE providers SET proposed_start_date=%s WHERE id=%s",
+            (request.provider.proposed_start_date, KEKOA_ID),
+        )
+        names = [r.name for r in request.provider.requirements]
+        conn.execute(
+            "DELETE FROM requirements WHERE provider_id=%s AND NOT(name=ANY(%s))",
+            (KEKOA_ID, names),
+        )
+        for requirement in request.provider.requirements:
+            conn.execute(
+                "UPDATE requirements SET status=%s,deadline=%s WHERE provider_id=%s AND name=%s",
+                (requirement.status, requirement.deadline, KEKOA_ID, requirement.name),
+            )
+    return client.post(
+        "/updates/analyze",
+        json={
+            "provider_id": str(KEKOA_ID),
+            "request_id": str(uuid4()),
+            "update_text": request.update_text,
+        },
+    )
 
 
 def test_mixed_scope_response(
@@ -37,9 +68,7 @@ def test_mixed_scope_response(
         ],
         "ambiguities": ["Original model warning."],
     }
-    response = client.post(
-        "/updates/analyze", json=update_request.model_dump(mode="json")
-    )
+    response = _post_update(client, update_request)
     assert response.status_code == 200
     data = response.json()
     assert [s["requirement"] for s in data["suggestions"]] == ["Hawaii dental license"]
@@ -65,9 +94,7 @@ def test_no_actionable_suggestions(
         if unmatched
         else []
     }
-    response = client.post(
-        "/updates/analyze", json=update_request.model_dump(mode="json")
-    )
+    response = _post_update(client, update_request)
     assert response.status_code == 200
     assert response.json()["suggestions"] == []
     assert "insufficient information" in response.json()["message"].lower()
@@ -88,9 +115,7 @@ def test_inferred_date_metadata(
             }
         ]
     }
-    response = client.post(
-        "/updates/analyze", json=update_request.model_dump(mode="json")
-    )
+    response = _post_update(client, update_request)
     assert response.status_code == 200
     change = response.json()["suggestions"][0]
     assert change["proposed_date"] == "2026-12-18"
@@ -121,9 +146,7 @@ def test_dates_without_start(
             }
         ]
     }
-    response = client.post(
-        "/updates/analyze", json=update_request.model_dump(mode="json")
-    )
+    response = _post_update(client, update_request)
     assert response.status_code == 200
     data = response.json()
     assert data["suggestions"][0]["proposed_date"] == (
@@ -151,9 +174,7 @@ def test_missing_date_warning(
             }
         ]
     }
-    response = client.post(
-        "/updates/analyze", json=update_request.model_dump(mode="json")
-    )
+    response = _post_update(client, update_request)
     assert response.status_code == 200
     assert len(response.json()["suggestions"]) == 1
     assert bool(response.json()["ambiguities"]) is scheduled
@@ -182,9 +203,7 @@ def test_model_errors(
         raise error
 
     monkeypatch.setattr(updates, "extract_update", fail)
-    response = client.post(
-        "/updates/analyze", json=update_request.model_dump(mode="json")
-    )
+    response = _post_update(client, update_request)
     assert response.status_code == status
     assert "synthetic-secret" not in response.text
     assert "suggestions" not in response.json()
@@ -193,14 +212,15 @@ def test_model_errors(
 def test_missing_configuration(
     monkeypatch: pytest.MonkeyPatch,
     update_request: AnalyzeUpdateRequest,
+    db_url,
+    seeded_provider,
 ) -> None:
+    monkeypatch.setenv("DATABASE_URL", db_url)
     for name in ("LLM_API_TOKEN", "LLM_API_GATEWAY", "LLM_MODEL"):
         monkeypatch.delenv(name, raising=False)
     with TestClient(main.app) as client:
         assert client.get("/").status_code == 200
-        response = client.post(
-            "/updates/analyze", json=update_request.model_dump(mode="json")
-        )
+        response = _post_update(client, update_request)
     assert response.status_code == 503
     assert "suggestions" not in response.json()
 
@@ -246,9 +266,7 @@ def test_invalid_model_date_keeps_suggestion_with_warning(
             }
         ]
     }
-    response = client.post(
-        "/updates/analyze", json=update_request.model_dump(mode="json")
-    )
+    response = _post_update(client, update_request)
     assert response.status_code == 200
     assert len(response.json()["suggestions"]) == 1
     assert response.json()["suggestions"][0]["proposed_date"] is None
@@ -256,15 +274,17 @@ def test_invalid_model_date_keeps_suggestion_with_warning(
 
 
 def test_invalid_gateway_returns_safe_configuration_error(
-    monkeypatch: pytest.MonkeyPatch, update_request: AnalyzeUpdateRequest
+    monkeypatch: pytest.MonkeyPatch,
+    update_request: AnalyzeUpdateRequest,
+    db_url,
+    seeded_provider,
 ) -> None:
+    monkeypatch.setenv("DATABASE_URL", db_url)
     monkeypatch.setenv("LLM_API_TOKEN", "synthetic-secret")
     monkeypatch.setenv("LLM_API_GATEWAY", "https://example.invalid:abc/v1")
     monkeypatch.setenv("LLM_MODEL", "synthetic-model")
     with TestClient(main.app, raise_server_exceptions=False) as client:
-        response = client.post(
-            "/updates/analyze", json=update_request.model_dump(mode="json")
-        )
+        response = _post_update(client, update_request)
     assert response.status_code == 503
     assert "synthetic-secret" not in response.text
     assert "example.invalid" not in response.text

@@ -90,6 +90,8 @@ The application will look up the selected provider's record and applicable onboa
 
 For the first model-connected feature, provider context will come from the existing synthetic page fixture, without retrieval or a database. Valid suggestions will remain visible alongside warnings for unknown or non-applicable requirements. If no actionable suggestions remain after filtering, the application will report insufficient information and leave the checklist unchanged.
 
+For the persistence and manager-review slice, the browser supplies a provider ID and update text; the server loads the authoritative checklist from PostgreSQL. Save the original update and captured provider context before extraction, and save suggestions and warnings together when extraction completes. Failed or interrupted analysis remains visible without partially reviewable suggestions. Reusing the same request ID must not repeat extraction; changed input with that ID is a conflict.
+
 ### Provider Types and Checklists
 
 The database design will account for multiple provider types, including dentists and dental hygienists. Store provider types and their standard requirement templates separately from each provider's actual checklist. Initialize a provider's checklist from their type's templates, then retain that provider's own statuses, dates, and review history. Changing a template must not silently add, remove, or change existing checklist entries.
@@ -120,7 +122,7 @@ Each provider can have multiple requirements and updates, and each update can ge
 
 Use Neon PostgreSQL for application persistence, configured through `DATABASE_URL` in the environment. Manage the schema with dbmate SQL migrations. The initial Onboard HQ database is empty; the migrations will establish its tables. Keep credentials in the ignored `.env` file and commit only placeholders in `.env.example`. Automated database tests will use a separate PostgreSQL test database.
 
-Persistence remains part of the eventual application. The first model-connected feature will not save providers, updates, suggestions, or date confirmations; refreshing the page will reset its temporary state.
+The first model-connected feature excludes saved records and resets temporary confirmations on refresh. The persistence and manager-review slice retains provider/checklist records, original updates and context, suggestions, and decisions across refreshes and restarts. A forward-only migration and an explicit idempotent synthetic seed establish the initial records; they do not run automatically at app startup.
 
 ## Searchable Text
 
@@ -135,6 +137,8 @@ Users will see the original update alongside proposed changes and supporting tex
 Anyone can propose an update. Only a manager can approve changes that update the checklist. For the prototype, a clearly labeled simulated Proposer/Manager role switch will represent those roles; actual sign-in and authenticated role enforcement are outside this slice.
 
 The first model-connected feature will include an editable date field and a Confirm date button for each inferred date. Confirmation will apply only to that suggested date in the current page, without approving a status change or saving a record. Editing a date will clear its confirmation, and submitting another update will reset confirmations. General suggestion approval, correction, rejection, and applying checklist status changes remain outside this feature.
+
+In the persistence and manager-review slice, a manager's approval includes any required inferred-date confirmation. Corrected approval retains the original proposal and records the applied status/date; rejection changes no checklist values. Apply the checklist change and review decision atomically. A suggestion can receive one terminal decision, and an approval against an older checklist version must conflict rather than overwrite newer progress. Requirement dates remain separate from deadlines.
 
 ## One Failure Case
 
@@ -157,6 +161,8 @@ The persistence and manager-review slice requires automated unit, integration, a
 - **End-to-end tests:** A real browser against the running app and isolated PostgreSQL, with `TestModel` substituted at the model boundary. Exercise proposing, switching simulated roles, manager approval/correction/rejection, and persistent checklist/history after refresh and application restart.
 
 Run all three layers in local verification and CI. No automated test calls a real local or cloud model, or writes to the Neon application database. Keep Ruff, mypy, and the complete pytest suite as required checks.
+
+Use pytest with real isolated PostgreSQL for integration tests and Playwright for browser tests. The browser test server substitutes `TestModel` and disables real model requests in its own process. Cover saved state after app restart, lost-response retries, stale/concurrent review, correction/rejection, date confirmation, and safe rendering of supporting text.
 
 ## Outside Version One
 
