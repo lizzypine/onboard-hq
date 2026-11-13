@@ -15,7 +15,7 @@ The canonical project spec is `docs/proposal.md`. `docs/proposal-v2.pdf` contain
 - Include a synthetic message mentioning two providers when evaluating provider scoping. Ethan suggested this harder case, but its expected behavior is not yet specified; settle it in the spec before implementing support for updates about multiple providers.
 - Policy/checklist documents retrieved by provider type, with citations to policy lines, are an investigation option from Ethan's feedback. Document retrieval and RAG are not committed version-one requirements.
 - Ethan suggested comparing the time to answer "what's still outstanding for Dr. X?" using the current process versus the app. Keep dashboard correctness checks; investigate this additional value measure with the health center contact before setting evaluation targets.
-- Anyone can propose updates; only a manager can approve changes. For this prototype, use a clearly labeled simulated Proposer/Manager role switch rather than sign-in. Enforce the selected role in the server's review operation, while making clear that a simulated role is not real access control.
+- Anyone can propose updates; only a manager can add fictional providers or approve changes. For this prototype, use a clearly labeled simulated Proposer/Manager role switch rather than sign-in. Enforce the selected role in the server's creation and review operations, while making clear that a simulated role is not real access control.
 - Persist application records in Neon PostgreSQL using `DATABASE_URL` from the environment. Manage schema changes with dbmate SQL migrations. Keep database credentials in `.env`, and use placeholder values only in `.env.example`. Automated database tests must use a separate test database rather than the configured Neon application database.
 - Use Pydantic for request/response validation and structured model output. Keep authorization and business rules in plain Python and relational integrity constraints in PostgreSQL.
 - The persistence and manager-review slice requires automated unit, PostgreSQL integration, and real-browser end-to-end tests, run locally and in CI. Use `TestModel` with real model requests disabled in every layer; never point automated tests at the Neon application database.
@@ -24,7 +24,8 @@ The canonical project spec is `docs/proposal.md`. `docs/proposal-v2.pdf` contain
 ## Layout
 
 - `app/main.py`: routes, dependency/lifecycle wiring, and HTTP error mapping. No business rules.
-- `app/page.py`: page markup; `app/static/onboarding.js`: browser data loading, history display, and saved-review orchestration.
+- `app/page.py`: page markup; `app/static/onboarding.js`: coherent provider selection/loading, creation recovery, history display, and saved-review orchestration.
+- `app/static/providers.js`: manager creation form, configured-template preview, stable save identity, and duplicate-name labels. No analysis or review calls.
 - `app/static/review.js`: one suggestion's editable checklist comparison, draft date actions, validation, and manager decision callbacks. No data loading or persistence.
 - `app/agent.py`: the Pydantic AI agent and output models.
 - `app/updates.py`: extraction, scope filtering, and date-resolution orchestration. No HTTP or UI code.

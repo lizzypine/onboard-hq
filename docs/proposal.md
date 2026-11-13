@@ -104,6 +104,8 @@ Managers can add fictional providers using a nonblank display name, a configured
 
 Use one creation identity for retries, returning the existing provider without resetting progress or reapplying changed templates. Conflicting details under that identity must fail rather than overwrite the saved record. Display names do not establish identity: distinct fictional providers may share a name, and the selector must distinguish them. Provider creation adds no real employee records, type templates, checklist exceptions, provider editing/deletion, or deadline editor.
 
+Preview the selected type's requirements before saving; the server copies the configured template at creation time. A manager can create the first provider when templates exist. Select the saved provider and load its checklist, monitoring, and history together, clearing the previous provider's update draft. If that refresh fails, show that saving succeeded, clear the old snapshot, and retain the saved selection for Refresh data. An unconfirmed save response can be retried from the same form using its original creation identity.
+
 ### Incomplete Dates
 
 For a date with a month and day but no year, infer the most recent valid occurrence on or before the provider's proposed start date. For a day alone, such as "on the 18th," infer the most recent valid occurrence of that day on or before the proposed start date. For example, a January 15, 2027 start implies October 22, 2026 for "October 22," and December 18, 2026 for "on the 18th."
@@ -171,7 +173,7 @@ Semantic search and retrieval-augmented generation (RAG) are outside the first m
 
 Users will see the original update alongside proposed changes and supporting text. They can approve, correct, or reject each suggestion. Only approved changes will update requirement statuses. Original messages and review decisions will be retained.
 
-Anyone can propose an update. Only a manager can approve changes that update the checklist. For the prototype, a clearly labeled simulated Proposer/Manager role switch will represent those roles; actual sign-in and authenticated role enforcement are outside this slice.
+Anyone can propose an update. Only a manager can add a fictional provider or approve changes that update the checklist. Creating a provider initializes Outstanding requirements without a model call; subsequent progress uses the approval flow. For the prototype, a clearly labeled simulated Proposer/Manager role switch will represent those roles; actual sign-in and authenticated role enforcement are outside this slice.
 
 The first model-connected feature will include an editable date field and a Confirm date button for each inferred date. Confirmation will apply only to that suggested date in the current page, without approving a status change or saving a record. Editing a date will clear its confirmation, and submitting another update will reset confirmations. General suggestion approval, correction, rejection, and applying checklist status changes remain outside this feature.
 

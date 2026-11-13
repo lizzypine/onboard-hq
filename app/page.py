@@ -51,6 +51,14 @@ PAGE = """<!doctype html>
     .review-invalid .review-change-label { color: #8b2e23; }
     .confirmation { display: flex; gap: 8px; align-items: center; margin-top: 14px; }
     .notice { color: #425d6b; }
+    .provider-form { margin-top: 18px; }
+    .provider-form fieldset { min-width: 0; border: 1px solid #cbd5df;
+      border-radius: 6px; padding: 16px; background: #f5f8fa; }
+    .provider-form legend { font-weight: 600; }
+    .provider-create-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .provider-name-field { grid-column: 1 / -1; }
+    .provider-field-label { display: block; font-weight: 600; margin-bottom: 6px; }
+    #provider-creation-status:empty { display: none; }
     .monitoring-counts { display: grid; grid-template-columns: repeat(4, 1fr);
       gap: 12px; margin: 16px 0; }
     .monitoring-counts div { background: #f1f6f8; border: 1px solid #dce5ea;
@@ -63,6 +71,7 @@ PAGE = """<!doctype html>
     #request-status { min-height: 1.5em; }
     @media (max-width: 600px) {
       main { padding: 14px; } section { padding: 16px; }
+      .provider-create-grid { grid-template-columns: 1fr; }
       .monitoring-counts { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
@@ -72,13 +81,13 @@ PAGE = """<!doctype html>
 <main>
   <h1>Onboard HQ</h1>
   <p>Provider onboarding dashboard</p>
-  <p class="notice"><strong>Prototype:</strong> Use synthetic updates only. Updates,
+  <p class="notice"><strong>Prototype:</strong> Use fictional providers and synthetic updates only. Updates,
     suggestions, and review history are saved. Only a manager's approval changes the checklist.</p>
   <section aria-labelledby="role-heading">
     <h2 id="role-heading">Demo role</h2>
     <label for="demo-role">Simulated role</label>
     <select id="demo-role"><option value="proposer">Proposer</option><option value="manager">Manager</option></select>
-    <p class="notice">Anyone can propose an update. Manager mode can approve, correct,
+    <p class="notice">Anyone can propose an update. Manager mode can add providers and approve, correct,
       or reject suggestions. This switch simulates a role; it does not verify identity.</p>
   </section>
   <section aria-labelledby="provider-heading">
@@ -86,7 +95,32 @@ PAGE = """<!doctype html>
     <label for="provider">Provider</label>
     <select id="provider" disabled><option>Loading providers…</option></select>
     <p id="provider-description"></p>
-    <button id="refresh-data" type="button">Refresh data</button>
+    <div class="actions">
+      <button id="refresh-data" type="button">Refresh data</button>
+      <button id="add-provider" type="button" hidden>Add provider</button>
+    </div>
+    <form id="provider-form" class="provider-form" aria-label="Add provider" hidden>
+      <fieldset id="provider-fields">
+        <legend>Add fictional provider</legend>
+        <p class="notice">Use a fictional name for this prototype. The selected type's requirements start Outstanding.</p>
+        <div class="provider-create-grid">
+          <div class="provider-name-field"><label for="new-provider-name">Provider name</label>
+            <input id="new-provider-name" type="text" required placeholder="Dr. Avery Example"></div>
+          <div id="provider-type-single" hidden><span class="provider-field-label">Provider type</span><p id="provider-type-name"></p></div>
+          <div id="provider-type-picker" hidden><label for="new-provider-type">Provider type</label><select id="new-provider-type"></select></div>
+          <div><label for="new-provider-start">Proposed start date (optional)</label><input id="new-provider-start" type="date"></div>
+        </div>
+        <p id="provider-template-count" class="notice"></p>
+        <div id="provider-preview" class="table-scroll" tabindex="0" role="region" aria-label="Scrollable provider checklist preview" hidden>
+          <table aria-label="New provider checklist preview">
+            <thead><tr><th scope="col">Requirement</th><th scope="col">Status</th><th scope="col">Requirement date</th><th scope="col">Deadline</th></tr></thead>
+            <tbody id="provider-preview-rows"></tbody>
+          </table>
+        </div>
+        <div class="actions"><button id="save-provider" type="submit" class="primary" disabled>Add provider</button><button id="cancel-provider" type="button">Cancel</button></div>
+      </fieldset>
+    </form>
+    <p id="provider-creation-status" role="status" aria-live="polite"></p>
   </section>
   <section aria-labelledby="checklist-heading">
     <h2 id="checklist-heading">2. Onboarding checklist</h2>
