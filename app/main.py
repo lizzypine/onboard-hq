@@ -31,11 +31,14 @@ from app.models import (
 from app.monitoring import get_dashboard, get_monitoring_date
 from app.monitoring_models import ProviderDashboard
 from app.page import PAGE
+from app.provider_models import CreateProviderRequest, ProviderTypeTemplate
+from app.providers import add_provider
 from app.repository import RecordNotFound
 from app.repository.providers import ProviderRepository
 from app.repository.reviews import ReviewRepository
 from app.repository.updates import UpdateConflict, UpdateRepository
 from app.reviews import AgentFactory, review_suggestion, submit_update
+from app.rules.providers import ProviderCreationConflict, ProviderCreationForbidden
 from app.rules.review import ReviewConflict, ReviewForbidden, ReviewValidationError
 
 
@@ -90,6 +93,22 @@ async def providers(
     repository: Annotated[ProviderRepository, Depends(get_repository)],
 ) -> list[ProviderSummary]:
     return await repository.list_providers()
+
+
+@router.get("/provider-types", response_model=list[ProviderTypeTemplate])
+async def provider_types(
+    repository: Annotated[ProviderRepository, Depends(get_repository)],
+) -> list[ProviderTypeTemplate]:
+    return await repository.list_provider_types()
+
+
+@router.post("/providers", response_model=StoredProvider, status_code=201)
+async def create_provider(
+    request: CreateProviderRequest,
+    repository: Annotated[ProviderRepository, Depends(get_repository)],
+    role: Annotated[DemoRole, Header(alias="X-Demo-Role")] = "proposer",
+) -> StoredProvider:
+    return await add_provider(repository, request, role)
 
 
 @router.get("/providers/{provider_id}", response_model=StoredProvider)
@@ -194,6 +213,8 @@ def create_app() -> FastAPI:
     application.add_exception_handler(RecordNotFound, missing_record)
     application.add_exception_handler(UpdateConflict, update_conflict)
     application.add_exception_handler(ReviewForbidden, review_forbidden)
+    application.add_exception_handler(ProviderCreationForbidden, review_forbidden)
+    application.add_exception_handler(ProviderCreationConflict, review_conflict)
     application.add_exception_handler(ReviewConflict, review_conflict)
     application.add_exception_handler(ReviewValidationError, review_invalid)
     return application

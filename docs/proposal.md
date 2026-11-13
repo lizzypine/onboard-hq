@@ -100,6 +100,10 @@ The database design will account for multiple provider types, including dentists
 
 Individual providers may need exceptions to their type's standard checklist, but the exception policy is not yet determined. Keep provider checklist entries separate from templates so the policy can be settled later. The persistence and manager-review slice will not add exception controls or automatically create requirements from free-text updates. Validate each type's actual requirements with the health center contact rather than assuming that different types share the same checklist.
 
+Managers can add fictional providers using a nonblank display name, a configured provider type, and an optional proposed start date. Enforce Manager mode on the server's creation operation; the role remains simulated. Only types with configured requirements are available. Create the provider and an independent copy of those requirements atomically. Every new requirement starts Outstanding, with no requirement date or deadline and version zero. Initial progress is entered afterward through the update-and-approval workflow.
+
+Use one creation identity for retries, returning the existing provider without resetting progress or reapplying changed templates. Conflicting details under that identity must fail rather than overwrite the saved record. Display names do not establish identity: distinct fictional providers may share a name, and the selector must distinguish them. Provider creation adds no real employee records, type templates, checklist exceptions, provider editing/deletion, or deadline editor.
+
 ### Incomplete Dates
 
 For a date with a month and day but no year, infer the most recent valid occurrence on or before the provider's proposed start date. For a day alone, such as "on the 18th," infer the most recent valid occurrence of that day on or before the proposed start date. For example, a January 15, 2027 start implies October 22, 2026 for "October 22," and December 18, 2026 for "on the 18th."
