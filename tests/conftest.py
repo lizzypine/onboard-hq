@@ -24,7 +24,7 @@ def db_url() -> str:
     migrate_test_database(url)
     with psycopg.connect(url) as conn:
         conn.execute(
-            "TRUNCATE review_decisions,suggestions,updates,requirements,providers,requirement_templates,provider_types"
+            "TRUNCATE checklist_edits,review_decisions,suggestions,updates,requirements,providers,requirement_templates,provider_types"
         )
     return url
 

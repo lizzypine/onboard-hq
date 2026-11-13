@@ -15,7 +15,7 @@ The canonical project spec is `docs/proposal.md`. `docs/proposal-v2.pdf` contain
 - Include a synthetic message mentioning two providers when evaluating provider scoping. Ethan suggested this harder case, but its expected behavior is not yet specified; settle it in the spec before implementing support for updates about multiple providers.
 - Policy/checklist documents retrieved by provider type, with citations to policy lines, are an investigation option from Ethan's feedback. Document retrieval and RAG are not committed version-one requirements.
 - Ethan suggested comparing the time to answer "what's still outstanding for Dr. X?" using the current process versus the app. Keep dashboard correctness checks; investigate this additional value measure with the health center contact before setting evaluation targets.
-- Anyone can propose updates; only a manager can add fictional providers or approve changes. For this prototype, use a clearly labeled simulated Proposer/Manager role switch rather than sign-in. Enforce the selected role in the server's creation and review operations, while making clear that a simulated role is not real access control.
+- Anyone can propose updates; only a manager can add fictional providers, approve suggestions, or directly save checklist status/date/deadline edits. For this prototype, use a clearly labeled simulated Proposer/Manager role switch rather than sign-in. Enforce it in creation, review, and manual save operations; it is not real access control. Manual saves require atomic immutable before/after history, stable retry identities, and shared requirement version checks.
 - Persist application records in Neon PostgreSQL using `DATABASE_URL` from the environment. Manage schema changes with dbmate SQL migrations. Keep database credentials in `.env`, and use placeholder values only in `.env.example`. Automated database tests must use a separate test database rather than the configured Neon application database.
 - Use Pydantic for request/response validation and structured model output. Keep authorization and business rules in plain Python and relational integrity constraints in PostgreSQL.
 - The persistence and manager-review slice requires automated unit, PostgreSQL integration, and real-browser end-to-end tests, run locally and in CI. Use `TestModel` with real model requests disabled in every layer; never point automated tests at the Neon application database.
@@ -32,6 +32,11 @@ The canonical project spec is `docs/proposal.md`. `docs/proposal-v2.pdf` contain
 - `app/database.py`: environment configuration and PostgreSQL connection lifecycle. No routes or model calls.
 - `app/models.py`: shared Pydantic context, stored-record, and HTTP contracts.
 - `app/provider_models.py`: provider-creation and configured type-template catalog contracts.
+- `app/checklist_models.py`: direct checklist edit request/audit records and derived dropdown option contracts, separate from stored LLM evidence.
+- `app/checklist.py`: Manager-only direct-edit orchestration; no HTTP/model calls.
+- `app/rules/checklist.py`: pure direct-save role, version, status, no-op, and retry identity rules.
+- `app/rules/statuses.py`: shared synthetic status choices, completion classification, and badge tones; unknown types retain Needs review.
+- `app/repository/checklist.py`: locked atomic checklist edits with append-only retryable audit history.
 - `app/providers.py`: manager-only provider creation orchestration; no HTTP or model calls.
 - `app/rules/providers.py`: pure creation authorization, initialization defaults, and reused-identity rules.
 - `app/monitoring_models.py`: derived dashboard contracts, separate from stored provider/context snapshots.
