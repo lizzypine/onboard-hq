@@ -48,6 +48,7 @@ PAGE = """<!doctype html>
     .review-saved { color: #425d6b; margin-bottom: 8px; }
     .review-original { color: #425d6b; margin-top: 5px; }
     .review-change-label { font-weight: 600; margin-top: 7px; }
+    .review-invalid .review-change-label { color: #8b2e23; }
     .confirmation { display: flex; gap: 8px; align-items: center; margin-top: 14px; }
     .notice { color: #425d6b; }
     .monitoring-counts { display: grid; grid-template-columns: repeat(4, 1fr);

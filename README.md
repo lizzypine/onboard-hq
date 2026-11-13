@@ -98,6 +98,9 @@ was proposed. Leave it untouched to keep that value, enter another date to set i
 or clear it to remove the date through **Approve with corrections**. Inferred dates
 must remain nonempty and explicitly confirmed before approval.
 
+Review and submit one suggestion at a time. Saving a decision, refreshing data,
+or switching role/provider rebuilds the review rows and clears other unsaved edits.
+
 For incomplete dates, Python uses the most recent valid occurrence on or before
 the proposed start date. Check the original wording and inference explanation,
 edit the inferred date if needed, then check **Confirm inferred date** and approve.

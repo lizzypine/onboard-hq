@@ -177,6 +177,8 @@ Show the affected requirement as a checklist-style row inside each pending sugge
 
 Edit dates directly in the row. An untouched date uses the proposed date, or the saved date when no date was proposed. Entering a different date sets it; clearing the field removes the date only through corrected approval. Invalid dates cannot be approved. Inferred dates still require explicit confirmation, which resets after a date edit; they cannot be approved with an empty or unconfirmed date. Each suggestion retains its own Approve, Approve with corrections, and Reject decisions.
 
+Unsubmitted field edits are temporary browser drafts. Reloading saved data, changing the selected role/provider, or saving a review decision rebuilds the review rows and discards those drafts. Only submitted decisions and their applied values persist.
+
 ## One Failure Case
 
 Input: "Everything looks good. We should be okay for November 1."

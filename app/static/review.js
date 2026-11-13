@@ -26,6 +26,15 @@ function editableCell(row, name, type, saved, initial, proposed, field) {
 
 function compare(field, isDate = false) {
   const value = isDate ? field.input.value : field.input.value.trim();
+  const invalidDate = isDate && !field.input.checkValidity();
+  field.cell.classList.toggle("review-invalid", invalidDate);
+  if (isDate) field.input.setAttribute("aria-invalid", String(invalidDate));
+  if (invalidDate) {
+    field.cell.classList.remove("review-change");
+    field.marker.textContent = field.input.validity.valueMissing
+      ? "A date is required for this inferred suggestion." : "Enter a complete valid date.";
+    return;
+  }
   const changed = value !== field.saved;
   field.cell.classList.toggle("review-change", changed);
   if (isDate && !value && field.saved) {
@@ -60,6 +69,7 @@ export function renderReviewControls(card, suggestion, current, {busy, onDecide}
   const initialDate = suggestion.proposed_date || current?.scheduled_date || "";
   const date = editableCell(row, "Reviewed date", "date", current ? current.scheduled_date || "" : null,
     initialDate, suggestion.proposed_date || "", "date");
+  date.input.required = suggestion.date_requires_confirmation;
   text(row, "td", current ? current.deadline || "Not set" : "Not available");
 
   let confirmation = null;
