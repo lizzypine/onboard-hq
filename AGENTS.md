@@ -26,6 +26,8 @@ The canonical project spec is `docs/proposal.md`. `docs/proposal-v2.pdf` contain
 - `app/main.py`: routes, dependency/lifecycle wiring, and HTTP error mapping. No business rules.
 - `app/page.py`: page markup; `app/static/onboarding.js`: coherent provider selection/loading, creation recovery, history display, and saved-review orchestration.
 - `app/static/providers.js`: manager creation form, configured-template preview, stable save identity, and duplicate-name labels. No analysis or review calls.
+- `app/static/checklist.js`: saved checklist rows, status badges, one Manager edit draft, and frozen manual-save recovery. No provider/history loading or model calls.
+- `app/static/statuses.js`: safe native status dropdown and labeled badge DOM helpers; choices and tones come from the dashboard.
 - `app/static/review.js`: one suggestion's editable checklist comparison, draft date actions, validation, and manager decision callbacks. No data loading or persistence.
 - `app/agent.py`: the Pydantic AI agent and output models.
 - `app/updates.py`: extraction, scope filtering, and date-resolution orchestration. No HTTP or UI code.

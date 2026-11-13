@@ -1,5 +1,7 @@
 "use strict";
 
+import {statusSelect} from "./statuses.js";
+
 function text(parent, tag, value, className = "") {
   const element = document.createElement(tag);
   element.textContent = value;
@@ -8,13 +10,13 @@ function text(parent, tag, value, className = "") {
   return element;
 }
 
-function editableCell(row, name, type, saved, initial, proposed, field) {
+function editableCell(row, name, type, saved, initial, proposed, field, choices = []) {
   const cell = text(row, "td", "");
   cell.dataset.reviewField = field;
   const savedLabel = saved === null ? "Not available" : saved || "Not set";
   text(cell, "span", "Saved: " + savedLabel, "review-saved");
-  const input = document.createElement("input");
-  input.type = type;
+  const input = type === "text" ? statusSelect({label: name, choices: [...choices, ...(saved === null ? [] : [saved]), proposed], value: initial}) : document.createElement("input");
+  if (type !== "text") input.type = type;
   input.setAttribute("aria-label", name);
   input.value = initial;
   input.required = type === "text";
@@ -48,7 +50,7 @@ function compare(field, isDate = false) {
   }
 }
 
-export function renderReviewControls(card, suggestion, current, {busy, onDecide}) {
+export function renderReviewControls(card, suggestion, current, {busy, onDecide, statusChoices}) {
   const fields = text(card, "fieldset", "", "review-fields");
   fields.disabled = busy;
   text(fields, "legend", "Manager decision");
@@ -65,7 +67,7 @@ export function renderReviewControls(card, suggestion, current, {busy, onDecide}
   const row = text(text(table, "tbody", ""), "tr", "");
   text(row, "td", suggestion.requirement);
   const status = editableCell(row, "Reviewed status", "text", current?.status ?? null,
-    suggestion.proposed_status, suggestion.proposed_status, "status");
+    suggestion.proposed_status, suggestion.proposed_status, "status", statusChoices);
   const initialDate = suggestion.proposed_date || current?.scheduled_date || "";
   const date = editableCell(row, "Reviewed date", "date", current ? current.scheduled_date || "" : null,
     initialDate, suggestion.proposed_date || "", "date");
@@ -101,6 +103,7 @@ export function renderReviewControls(card, suggestion, current, {busy, onDecide}
     correct.disabled = Boolean(invalid || !edited);
   }
   status.input.addEventListener("input", sync);
+  status.input.addEventListener("change", sync);
   date.input.addEventListener("input", () => {
     if (confirmation) confirmation.checked = false;
     sync();

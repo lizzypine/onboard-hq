@@ -15,6 +15,10 @@ PAGE = """<!doctype html>
       padding: 20px; margin: 20px 0; }
     h1, h2, h3, h4 { line-height: 1.25; }
     h2 { font-size: 1.25rem; margin-top: 0; }
+    .section-heading { display: flex; justify-content: space-between;
+      align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .section-heading h2 { margin-bottom: 0; }
+    .section-heading button { margin-left: auto; }
     h3 { font-size: 1.1rem; }
     h4 { margin: 0 0 12px; }
     label { display: block; font-weight: 600; margin-bottom: 6px; }
@@ -30,6 +34,29 @@ PAGE = """<!doctype html>
     .table-scroll { max-width: 100%; overflow-x: auto; }
     table { border-collapse: collapse; width: 100%; min-width: 540px; }
     th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #dde5e9; }
+    table[aria-label="Onboarding checklist"] { min-width: 760px; }
+    table[aria-label="Onboarding checklist"] thead { background: #205f79; color: white; }
+    .requirement-row td { border-bottom-color: #bdcfd9; vertical-align: top; }
+    .requirement-row.stripe-even { background: #edf4f8; }
+    .requirement-row.editing { box-shadow: inset 4px 0 #205f79; }
+    .editing-label { display: block; font-weight: 600; color: #205f79; }
+    .status-badge { display: inline-block; padding: 3px 10px; border-radius: 999px;
+      font-weight: 600; max-width: 240px; overflow-wrap: anywhere; }
+    .status-badge:not(.status-unknown) { white-space: nowrap; }
+    .status-finished { background: #ddf3e6; color: #185b36; }
+    .status-progress { background: #dceefa; color: #174e78; }
+    .status-attention { background: #fff0cc; color: #765000; }
+    .status-unknown { background: #e9edf0; color: #354c5a; }
+    .checklist-fields { min-width: 0; margin: 4px 0; padding: 14px;
+      border: 1px solid #9bb7c7; border-radius: 6px; background: #f5f8fa; }
+    .checklist-edit-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .manual-change { background: #fff2cc; padding: 6px; }
+    .manual-change-label { display: block; font-size: .85rem; margin-top: 6px; }
+    #checklist-status:empty { display: none; }
+    #review-disclosure > summary { cursor: pointer; }
+    #review-disclosure > summary h2 { display: inline; }
+    #pending-suggestions { display: inline-block; color: #425d6b; margin-left: 10px; }
+    #review-results { margin-top: 20px; }
     p, li, blockquote { overflow-wrap: anywhere; }
     blockquote { margin: 12px 0; padding: 10px 14px; border-left: 3px solid #a9bfca;
       background: #f5f8fa; white-space: pre-wrap; }
@@ -72,6 +99,8 @@ PAGE = """<!doctype html>
     @media (max-width: 600px) {
       main { padding: 14px; } section { padding: 16px; }
       .provider-create-grid { grid-template-columns: 1fr; }
+      .checklist-edit-grid { grid-template-columns: 1fr; }
+      .checklist-fields { max-width: calc(100vw - 100px); }
       .monitoring-counts { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
@@ -82,22 +111,22 @@ PAGE = """<!doctype html>
   <h1>Onboard HQ</h1>
   <p>Provider onboarding dashboard</p>
   <p class="notice"><strong>Prototype:</strong> Use fictional providers and synthetic updates only. Updates,
-    suggestions, and review history are saved. Only a manager's approval changes the checklist.</p>
+    suggestions, and change history are saved. Only a manager can save checklist changes.</p>
   <section aria-labelledby="role-heading">
     <h2 id="role-heading">Demo role</h2>
     <label for="demo-role">Simulated role</label>
     <select id="demo-role"><option value="proposer">Proposer</option><option value="manager">Manager</option></select>
-    <p class="notice">Anyone can propose an update. Manager mode can add providers and approve, correct,
-      or reject suggestions. This switch simulates a role; it does not verify identity.</p>
+    <p class="notice">Anyone can propose an update. Manager mode can add providers, edit checklist
+      statuses and dates, and approve, correct, or reject suggestions. This switch simulates a role; it does not verify identity.</p>
   </section>
   <section aria-labelledby="provider-heading">
-    <h2 id="provider-heading">1. Select a provider</h2>
+    <div class="section-heading"><h2 id="provider-heading">1. Select a provider</h2>
+      <button id="add-provider" type="button" hidden>Add provider</button></div>
     <label for="provider">Provider</label>
     <select id="provider" disabled><option>Loading providers…</option></select>
     <p id="provider-description"></p>
     <div class="actions">
       <button id="refresh-data" type="button">Refresh data</button>
-      <button id="add-provider" type="button" hidden>Add provider</button>
     </div>
     <form id="provider-form" class="provider-form" aria-label="Add provider" hidden>
       <fieldset id="provider-fields">
@@ -141,13 +170,15 @@ PAGE = """<!doctype html>
       <table aria-label="Onboarding checklist">
         <thead><tr><th scope="col">Requirement</th><th scope="col">Status</th>
           <th scope="col">Requirement date</th><th scope="col">Deadline</th>
-          <th scope="col">Monitoring</th></tr></thead>
+          <th scope="col">Monitoring</th><th scope="col" id="checklist-action-heading" hidden>Action</th></tr></thead>
         <tbody id="requirements"></tbody>
       </table>
     </div>
+    <p id="checklist-status" role="status" aria-live="polite"></p>
+    <button type="button" id="retry-checklist" hidden>Retry checklist save</button>
   </section>
   <section aria-labelledby="update-heading">
-    <h2 id="update-heading">3. Propose an update</h2>
+    <h2 id="update-heading">3. Updates</h2>
     <form id="update-form" action="/updates/analyze" method="post">
       <label for="update-text">Original update</label>
       <textarea id="update-text" required placeholder="Enter a synthetic onboarding update"></textarea>
@@ -156,8 +187,11 @@ PAGE = """<!doctype html>
     <p id="request-status" role="status" aria-live="polite">Loading saved data…</p>
   </section>
   <section aria-labelledby="review-heading">
-    <h2 id="review-heading">4. Suggestions and review history</h2>
-    <div id="review-results"></div>
+    <details id="review-disclosure">
+      <summary><h2 id="review-heading">4. Suggestions and review history</h2>
+        <span id="pending-suggestions">0 pending suggestions</span></summary>
+      <div id="review-results"></div>
+    </details>
   </section>
 </main>
 </body>

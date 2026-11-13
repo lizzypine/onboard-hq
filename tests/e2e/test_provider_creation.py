@@ -8,6 +8,7 @@ import pytest
 from playwright.sync_api import expect
 
 from tests.database import configured_test_url
+from tests.e2e.test_review_workflow import open_history
 
 
 def providers(page, app_server):
@@ -299,6 +300,7 @@ def test_new_provider_analysis_and_review_stay_scoped_after_restart(
     assert_new_counts(page)
     page.get_by_label("Original update", exact=True).fill("Drug screening on the 18th.")
     page.get_by_role("button", name="Analyze update", exact=True).click()
+    open_history(page)
     card = page.get_by_role("article", name="Drug screening", exact=True)
     expect(card).to_contain_text("2026-12-18")
     page.get_by_label("Simulated role", exact=True).select_option("manager")

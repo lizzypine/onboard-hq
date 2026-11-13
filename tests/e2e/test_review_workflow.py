@@ -15,6 +15,13 @@ def propose(page, app_server, text="Drug screening completed."):
     expect(page.get_by_label("Simulated role")).to_have_value("proposer")
     page.get_by_label("Original update").fill(text)
     page.get_by_role("button", name="Analyze update", exact=True).click()
+    open_history(page)
+
+
+def open_history(page):
+    disclosure = page.locator("#review-disclosure")
+    if not disclosure.evaluate("e => e.open"):
+        disclosure.locator("summary").click()
 
 
 def drug_card(page):
@@ -34,6 +41,7 @@ def test_manager_approval_survives_refresh_and_server_restart(page, app_server):
     expect(drug_card(page)).to_be_visible()
     expect(page.get_by_role("button", name="Approve", exact=True)).to_have_count(0)
     page.reload()
+    open_history(page)
     expect(drug_card(page)).to_be_visible()
     page.get_by_label("Simulated role").select_option("manager")
     page.get_by_role("button", name="Approve", exact=True).click()
@@ -41,6 +49,7 @@ def test_manager_approval_survives_refresh_and_server_restart(page, app_server):
     expect(drug_card(page)).to_contain_text("Approved")
     app_server.restart()
     page.reload()
+    open_history(page)
     expect(drug_row(page)).to_contain_text("Completed")
     expect(drug_card(page)).to_contain_text("Drug screening completed.")
 
@@ -107,6 +116,7 @@ def test_empty_failed_and_warning_updates_remain_visible(
     propose(page, app_server, "Synthetic update.")
     expect(page.get_by_text(expected, exact=False).first).to_be_visible()
     page.reload()
+    open_history(page)
     expect(page.get_by_text(expected, exact=False).first).to_be_visible()
 
 
@@ -132,7 +142,7 @@ def test_status_correction_and_date_clearing_keep_deadline(page, app_server):
     expect(drug_card(page)).to_be_visible()
     page.get_by_label("Simulated role").select_option("manager")
     card = drug_card(page)
-    card.get_by_label("Reviewed status").fill("Incomplete")
+    card.get_by_label("Reviewed status").select_option("Incomplete")
     card.get_by_label("Reviewed date", exact=True).fill("")
     card.get_by_role("button", name="Approve with corrections", exact=True).click()
     expect(drug_row(page)).to_contain_text("Incomplete")
@@ -234,6 +244,7 @@ def test_unfinished_analysis_has_no_review_actions(page, app_server, seeded_prov
             ),
         )
     page.goto(app_server.url)
+    open_history(page)
     expect(page.get_by_text("Analysis unfinished.", exact=False)).to_be_visible()
     page.get_by_label("Simulated role").select_option("manager")
     expect(page.get_by_role("button", name="Approve", exact=True)).to_have_count(0)
