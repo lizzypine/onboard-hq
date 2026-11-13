@@ -1,6 +1,7 @@
 "use strict";
 
 import {renderReviewControls} from "./review.js";
+import {providerLabel, setupProviderCreation} from "./providers.js";
 
 const providerSelect = document.getElementById("provider");
 const roleSelect = document.getElementById("demo-role");
@@ -9,7 +10,8 @@ const refreshButton = document.getElementById("refresh-data");
 const updateText = document.getElementById("update-text");
 const status = document.getElementById("request-status");
 const results = document.getElementById("review-results");
-const state = {provider: null, monitoring: null, history: [], busy: false, generation: 0, pending: null};
+const state = {provider: null, monitoring: null, history: [], busy: false, generation: 0, pending: null, preferredProviderId: null};
+let creation = null;
 
 function text(parent, tag, value) {
   const element = document.createElement(tag);
@@ -39,6 +41,7 @@ function setBusy(value) {
   refreshButton.disabled = value;
   submitButton.disabled = value || !state.provider;
   document.querySelectorAll(".review-fields").forEach(element => { element.disabled = value; });
+  creation?.setBusy(value);
 }
 
 function monitoringLabel(indicator) {
@@ -164,24 +167,37 @@ async function loadState() {
   renderHistory();
 }
 
-async function initialize() {
+function clearSnapshot() {
+  ++state.generation;
+  state.provider = null;
+  state.monitoring = null;
+  state.history = [];
+  renderChecklist();
+  renderHistory();
+}
+
+async function initialize(preferredId = state.preferredProviderId) {
+  const selected = preferredId || providerSelect.value;
   setBusy(true);
+  clearSnapshot();
   try {
-    const selected = providerSelect.value;
     const providers = await api("/providers");
     providerSelect.replaceChildren();
-    providers.forEach(provider => option(providerSelect, provider.id, provider.name));
+    providers.forEach(provider => option(providerSelect, provider.id, providerLabel(provider, providers)));
     if (providers.some(provider => provider.id === selected)) providerSelect.value = selected;
-    if (!providers.length) throw new Error("No providers are available. Ask the administrator to initialize the demo.");
+    if (!providers.length) {
+      status.textContent = "No providers yet. A manager can add a fictional provider when templates are configured.";
+      return false;
+    }
     await loadState();
+    state.preferredProviderId = null;
+    creation?.onProviderLoaded(state.provider.id);
     status.textContent = "Saved checklist and review history loaded.";
+    return true;
   } catch {
-    state.provider = null;
-    state.monitoring = null;
-    state.history = [];
-    renderChecklist();
-    renderHistory();
+    clearSnapshot();
     status.textContent = "Saved data is unavailable. Try Refresh data or ask the administrator.";
+    return false;
   } finally { setBusy(false); }
 }
 
@@ -210,7 +226,19 @@ document.getElementById("update-form").addEventListener("submit", async event =>
 });
 
 updateText.addEventListener("input", () => { state.pending = null; });
-roleSelect.addEventListener("change", renderHistory);
-providerSelect.addEventListener("change", () => initialize());
-refreshButton.addEventListener("click", initialize);
+creation = setupProviderCreation({api, roleSelect, setBusy, onCreated: async id => {
+  state.preferredProviderId = id;
+  updateText.value = "";
+  state.pending = null;
+  if (!await initialize(id)) throw new Error("Saved provider could not load.");
+  providerSelect.focus();
+}});
+roleSelect.addEventListener("change", () => { renderHistory(); creation.syncRole(); });
+providerSelect.addEventListener("change", () => {
+  state.preferredProviderId = null;
+  updateText.value = "";
+  state.pending = null;
+  initialize();
+});
+refreshButton.addEventListener("click", () => initialize());
 initialize();

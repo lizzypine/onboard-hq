@@ -25,8 +25,9 @@ Do not commit credentials. Start the development server with:
 uv run --env-file .env fastapi dev app/main.py
 ```
 
-The HTML shell loads without configuration. Provider data requires a migrated,
-seeded database; analysis also requires the model settings. Automated tests use
+The HTML shell loads without configuration. Provider data requires a migrated
+database with configured type templates (the explicit development seed supplies
+the synthetic Dentist templates); analysis also requires the model settings. Automated tests use
 `TestModel` and block real model requests, including the browser test server:
 
 ```sh
@@ -87,6 +88,24 @@ or reject each suggestion independently. Only approved changes update the checkl
 Original proposals remain visible alongside the decision and its applied values.
 This role switch demonstrates permissions and does not authenticate a person.
 
+In **Manager** mode, choose **Add provider**, enter a fictional name, choose a
+configured type, and optionally set a proposed start date. A single available type
+appears as text. Review the requirement preview, then save. Each provider receives
+an independent checklist from the current type template: all requirements start
+**Outstanding**, with dates and deadlines **Not set**. Creation makes no model call;
+enter progress through the existing update-and-approval flow. Managers can also add
+the first provider when templates are configured. Types with no requirements are
+unavailable; this screen does not edit templates or existing provider profiles.
+
+The new provider is selected after saving; the previous provider's update draft is
+cleared. Duplicate names remain separate records, distinguished in the picker by
+type, start date, and a short reference. If a save response is lost, retry the same
+form to recover the original record. Keep its details unchanged: changed details
+under the same save identity conflict rather than overwrite a saved provider. If
+saving succeeds but loading fails, use **Refresh data** or retry that form to load
+the saved provider. Creation never resets progress or reapplies template changes
+on retry. Cancel closes the form; it does not undo a save that already succeeded.
+
 Each pending Manager decision shows the affected requirement as an editable
 checklist row. Highlighted cells and text identify differences from saved values;
 the original proposal remains visible while you correct **Reviewed status** or
@@ -136,8 +155,10 @@ start dates never substitute for deadlines; existing missing deadlines remain un
 The labeled as-of date describes the loaded snapshot. Loading a provider,
 **Refresh data**, and successful analysis/review reload monitoring; there is no
 automatic midnight refresh. Pending or rejected proposals and role switches leave
-the counts unchanged. A failed refresh after a saved operation retains the whole
-previous snapshot and explains that saving succeeded. An unavailable initial load
+the counts unchanged. A failed immediate refresh after a saved analysis/review retains
+the whole previous snapshot and explains that saving succeeded. Provider selection,
+creation, and **Refresh data** clear the old snapshot before loading a new one, so
+a failed load cannot display another provider's checklist. An unavailable initial load
 shows no counts and disables submission. Empty saved checklists explicitly show
 zero counts and an empty message; no checklist is described as permission to start.
 
