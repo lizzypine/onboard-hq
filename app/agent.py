@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from pydantic_ai.models import Model
-from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from app.models import (
@@ -89,6 +89,7 @@ def _validate_gateway(gateway: str) -> None:
 
 def build_agent(model: Model | None = None) -> Agent[None, ExtractionResult]:
     """Build lazily; injected test models need no gateway configuration."""
+    settings: OpenAIChatModelSettings | None = None
     if model is None:
         names = ("LLM_API_TOKEN", "LLM_API_GATEWAY", "LLM_MODEL")
         values = [os.environ.get(name, "").strip() for name in names]
@@ -98,7 +99,15 @@ def build_agent(model: Model | None = None) -> Agent[None, ExtractionResult]:
         _validate_gateway(gateway)
         provider = OpenAIProvider(base_url=gateway, api_key=token)
         model = OpenAIChatModel(model_name, provider=provider)
-    return Agent(model, output_type=ExtractionResult, instructions=INSTRUCTIONS)
+        if model_name == "gpt-6-luna":
+            # This model requires reasoning disabled for Chat Completions tools.
+            settings = OpenAIChatModelSettings(openai_reasoning_effort="none")
+    return Agent(
+        model,
+        output_type=ExtractionResult,
+        instructions=INSTRUCTIONS,
+        model_settings=settings,
+    )
 
 
 async def extract_update(

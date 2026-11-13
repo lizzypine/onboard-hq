@@ -14,6 +14,11 @@ in a local, ignored `.env` file:
 - `DATABASE_URL`: the pooled Neon PostgreSQL connection used by the app.
 - `DATABASE_URL_UNPOOLED`: the direct connection for dbmate migrations.
 
+For `LLM_MODEL=gpt-6-luna`, the app explicitly disables reasoning on Chat
+Completions requests because this model rejects function tools with reasoning
+enabled. Structured extraction still uses Pydantic validation. Other configured
+models retain their default reasoning settings.
+
 Do not commit credentials. Start the development server with:
 
 ```sh
