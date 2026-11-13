@@ -87,6 +87,17 @@ or reject each suggestion independently. Only approved changes update the checkl
 Original proposals remain visible alongside the decision and its applied values.
 This role switch demonstrates permissions and does not authenticate a person.
 
+Each pending Manager decision shows the affected requirement as an editable
+checklist row. Highlighted cells and text identify differences from saved values;
+the original proposal remains visible while you correct **Reviewed status** or
+**Reviewed date**. Requirement names and deadlines are read-only. The saved
+checklist and monitoring counts change only after approval.
+
+The date field initially contains the proposed date, or the saved date when none
+was proposed. Leave it untouched to keep that value, enter another date to set it,
+or clear it to remove the date through **Approve with corrections**. Inferred dates
+must remain nonempty and explicitly confirmed before approval.
+
 For incomplete dates, Python uses the most recent valid occurrence on or before
 the proposed start date. Check the original wording and inference explanation,
 edit the inferred date if needed, then check **Confirm inferred date** and approve.

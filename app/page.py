@@ -37,7 +37,17 @@ PAGE = """<!doctype html>
     .update { padding-bottom: 16px; border-bottom: 2px solid #dce5ea; }
     .review-fields { border: 1px solid #cbd5df; background: #f5f8fa;
       border-radius: 6px; padding: 14px; margin-top: 14px; min-width: 0; }
-    .review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .review-table { min-width: 620px; table-layout: fixed; }
+    .review-table th:nth-child(1) { width: 23%; }
+    .review-table th:nth-child(2) { width: 29%; }
+    .review-table th:nth-child(3) { width: 30%; }
+    .review-table th:nth-child(4) { width: 18%; }
+    .review-table td { vertical-align: top; overflow-wrap: anywhere; }
+    .review-table .review-change { background: #fff2cc; box-shadow: inset 0 3px #ad7513; }
+    .review-saved, .review-original, .review-change-label { display: block; font-size: .85rem; }
+    .review-saved { color: #425d6b; margin-bottom: 8px; }
+    .review-original { color: #425d6b; margin-top: 5px; }
+    .review-change-label { font-weight: 600; margin-top: 7px; }
     .confirmation { display: flex; gap: 8px; align-items: center; margin-top: 14px; }
     .notice { color: #425d6b; }
     .monitoring-counts { display: grid; grid-template-columns: repeat(4, 1fr);
@@ -52,11 +62,10 @@ PAGE = """<!doctype html>
     #request-status { min-height: 1.5em; }
     @media (max-width: 600px) {
       main { padding: 14px; } section { padding: 16px; }
-      .review-grid { grid-template-columns: 1fr; }
       .monitoring-counts { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
-  <script src="/static/onboarding.js" defer></script>
+  <script src="/static/onboarding.js" type="module"></script>
 </head>
 <body>
 <main>

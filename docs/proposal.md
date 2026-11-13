@@ -173,6 +173,10 @@ The first model-connected feature will include an editable date field and a Conf
 
 In the persistence and manager-review slice, a manager's approval includes any required inferred-date confirmation. Corrected approval retains the original proposal and records the applied status/date; rejection changes no checklist values. Apply the checklist change and review decision atomically. A suggestion can receive one terminal decision, and an approval against an older checklist version must conflict rather than overwrite newer progress. Requirement dates remain separate from deadlines.
 
+Show the affected requirement as a checklist-style row inside each pending suggestion's manager decision area. Keep the saved checklist above unchanged until approval. Status and Requirement date are editable; Requirement name and Deadline are read-only. Show saved and originally proposed values, and highlight reviewed values that differ from the saved values with text as well as color. Update that comparison as the manager edits, while retaining the original update and supporting text.
+
+Edit dates directly in the row. An untouched date uses the proposed date, or the saved date when no date was proposed. Entering a different date sets it; clearing the field removes the date only through corrected approval. Invalid dates cannot be approved. Inferred dates still require explicit confirmation, which resets after a date edit; they cannot be approved with an empty or unconfirmed date. Each suggestion retains its own Approve, Approve with corrections, and Reject decisions.
+
 ## One Failure Case
 
 Input: "Everything looks good. We should be okay for November 1."

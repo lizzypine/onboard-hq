@@ -1,5 +1,7 @@
 "use strict";
 
+import {renderReviewControls} from "./review.js";
+
 const providerSelect = document.getElementById("provider");
 const roleSelect = document.getElementById("demo-role");
 const submitButton = document.getElementById("submit-update");
@@ -78,15 +80,6 @@ function renderChecklist() {
   }
 }
 
-function labeled(parent, tag, labelText, id) {
-  const label = text(parent, "label", labelText);
-  label.htmlFor = id;
-  const input = document.createElement(tag);
-  input.id = id;
-  parent.append(input);
-  return input;
-}
-
 function option(select, value, label) {
   const item = text(select, "option", label);
   item.value = value;
@@ -113,86 +106,16 @@ async function decide(suggestion, body) {
   } finally { setBusy(false); }
 }
 
-function reviewControls(card, suggestion, current) {
-  const fields = text(card, "fieldset", "");
-  fields.className = "review-fields";
-  fields.disabled = state.busy;
-  text(fields, "legend", "Manager decision");
-  const grid = text(fields, "div", "");
-  grid.className = "review-grid";
-  const statusBox = text(grid, "div", "");
-  const statusInput = labeled(statusBox, "input", "Reviewed status", "status-" + suggestion.id);
-  statusInput.type = "text";
-  statusInput.required = true;
-  statusInput.value = suggestion.proposed_status;
-  const dateBox = text(grid, "div", "");
-  const dateInput = labeled(dateBox, "input", "Reviewed date", "date-" + suggestion.id);
-  dateInput.type = "date";
-  const initialDate = suggestion.proposed_date || current?.scheduled_date || "";
-  dateInput.value = initialDate;
-  const dateMode = labeled(fields, "select", "Date change", "date-mode-" + suggestion.id);
-  option(dateMode, "preserve", "Keep proposed date, or current date if none was proposed");
-  option(dateMode, "set", "Set a date");
-  const clear = option(dateMode, "clear", "Clear the current date");
-  clear.disabled = suggestion.date_requires_confirmation;
-  let confirmation = null;
-  if (suggestion.date_requires_confirmation) {
-    const label = text(fields, "label", "");
-    label.className = "confirmation";
-    confirmation = document.createElement("input");
-    confirmation.type = "checkbox";
-    label.append(confirmation, document.createTextNode("Confirm inferred date"));
-  }
-  const actions = text(fields, "div", "");
-  actions.className = "actions";
-  const approve = text(actions, "button", "Approve");
-  const correct = text(actions, "button", "Approve with corrections");
-  const reject = text(actions, "button", "Reject");
-  [approve, correct, reject].forEach(button => { button.type = "button"; });
-  const stale = !current || current.version !== suggestion.requirement_version;
-  if (stale) text(card, "p", "The checklist changed after this proposal. Reanalyze before approving; you can still reject it.");
-  function sync() {
-    const edited = statusInput.value.trim() !== suggestion.proposed_status || dateMode.value !== "preserve";
-    const dateValid = dateMode.value !== "set" || (dateInput.value && dateInput.checkValidity());
-    const confirmed = !confirmation || (confirmation.checked && dateInput.value && dateMode.value !== "clear");
-    const invalid = stale || !statusInput.value.trim() || !dateValid || !confirmed;
-    approve.disabled = Boolean(invalid || edited);
-    correct.disabled = Boolean(invalid || !edited);
-  }
-  statusInput.addEventListener("input", sync);
-  dateInput.addEventListener("input", () => {
-    dateMode.value = "set";
-    if (confirmation) confirmation.checked = false;
-    sync();
-  });
-  dateMode.addEventListener("change", () => {
-    dateInput.disabled = dateMode.value === "clear";
-    dateInput.required = dateMode.value === "set";
-    if (dateMode.value === "preserve") dateInput.value = initialDate;
-    if (dateMode.value === "clear") dateInput.value = "";
-    if (confirmation) confirmation.checked = false;
-    sync();
-  });
-  if (confirmation) confirmation.addEventListener("change", sync);
-  approve.addEventListener("click", () => decide(suggestion, {action: "approve", date_confirmed: Boolean(confirmation?.checked)}));
-  correct.addEventListener("click", () => {
-    const body = {action: "correct", date_confirmed: Boolean(confirmation?.checked)};
-    if (statusInput.value.trim() !== suggestion.proposed_status) body.corrected_status = statusInput.value.trim();
-    if (dateMode.value !== "preserve") body.date_action = dateMode.value;
-    if (dateMode.value === "set") body.corrected_date = dateInput.value;
-    decide(suggestion, body);
-  });
-  reject.addEventListener("click", () => decide(suggestion, {action: "reject"}));
-  sync();
-}
-
 function renderSuggestion(parent, suggestion, completed) {
   const card = text(parent, "article", "");
   card.className = "suggestion";
   card.setAttribute("aria-label", suggestion.requirement);
   text(card, "h4", suggestion.requirement);
-  text(card, "p", "Proposed status: " + suggestion.proposed_status);
-  text(card, "p", "Proposed date: " + (suggestion.proposed_date || "Not specified"));
+  const canReview = !suggestion.decision && completed && roleSelect.value === "manager";
+  if (!canReview) {
+    text(card, "p", "Proposed status: " + suggestion.proposed_status);
+    text(card, "p", "Proposed date: " + (suggestion.proposed_date || "Not specified"));
+  }
   text(card, "blockquote", suggestion.supporting_text);
   if (suggestion.date_text) text(card, "p", "Original date wording: " + suggestion.date_text);
   if (suggestion.date_explanation) text(card, "p", "Original inference: " + suggestion.date_explanation);
@@ -204,8 +127,9 @@ function renderSuggestion(parent, suggestion, completed) {
       text(card, "p", "Applied date: " + (decision.applied_scheduled_date || "Not set"));
     } else text(card, "p", "Checklist unchanged by this decision.");
     text(card, "p", "Reviewed: " + new Date(decision.reviewed_at).toLocaleString());
-  } else if (completed && roleSelect.value === "manager") {
-    reviewControls(card, suggestion, state.provider.requirements.find(r => r.id === suggestion.requirement_id));
+  } else if (canReview) {
+    renderReviewControls(card, suggestion, state.provider.requirements.find(r => r.id === suggestion.requirement_id),
+      {busy: state.busy, onDecide: decide});
   } else text(card, "p", completed ? "Awaiting manager review." : "Analysis is unfinished; this cannot be reviewed.");
 }
 

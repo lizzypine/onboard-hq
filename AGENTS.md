@@ -24,7 +24,8 @@ The canonical project spec is `docs/proposal.md`. `docs/proposal-v2.pdf` contain
 ## Layout
 
 - `app/main.py`: routes, dependency/lifecycle wiring, and HTTP error mapping. No business rules.
-- `app/page.py`: page markup; `app/static/onboarding.js`: browser data loading and review interactions.
+- `app/page.py`: page markup; `app/static/onboarding.js`: browser data loading, history display, and saved-review orchestration.
+- `app/static/review.js`: one suggestion's editable checklist comparison, draft date actions, validation, and manager decision callbacks. No data loading or persistence.
 - `app/agent.py`: the Pydantic AI agent and output models.
 - `app/updates.py`: extraction, scope filtering, and date-resolution orchestration. No HTTP or UI code.
 - `app/database.py`: environment configuration and PostgreSQL connection lifecycle. No routes or model calls.
