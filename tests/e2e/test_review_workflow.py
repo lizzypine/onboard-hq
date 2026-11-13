@@ -133,7 +133,7 @@ def test_status_correction_and_date_clearing_keep_deadline(page, app_server):
     page.get_by_label("Simulated role").select_option("manager")
     card = drug_card(page)
     card.get_by_label("Reviewed status").fill("Incomplete")
-    card.get_by_label("Date change").select_option("clear")
+    card.get_by_label("Reviewed date", exact=True).fill("")
     card.get_by_role("button", name="Approve with corrections", exact=True).click()
     expect(drug_row(page)).to_contain_text("Incomplete")
     expect(drug_row(page)).to_contain_text("Not set")
