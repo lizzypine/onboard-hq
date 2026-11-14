@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.checklist_models import RequirementEditOptions
 from app.models import StoredProvider
 
 Completion = Literal["finished", "outstanding", "needs_review"]
@@ -36,3 +37,4 @@ class ProviderMonitoring(BaseModel):
 class ProviderDashboard(BaseModel):
     provider: StoredProvider
     monitoring: ProviderMonitoring
+    checklist_options: list[RequirementEditOptions]

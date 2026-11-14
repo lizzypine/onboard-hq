@@ -7,7 +7,7 @@ import pytest
 from playwright.sync_api import expect
 
 from tests.database import ROOT, configured_test_url
-from tests.e2e.test_review_workflow import drug_card, drug_row, propose
+from tests.e2e.test_review_workflow import drug_card, drug_row, open_history, propose
 
 
 @pytest.fixture(autouse=True)
@@ -53,7 +53,7 @@ def indicator(page, name="Drug screening"):
         .get_by_role("row")
         .filter(has_text=name)
         .get_by_role("cell")
-        .last
+        .nth(4)
     )
 
 
@@ -92,12 +92,13 @@ def test_monitoring_approval_reversal_and_restart(page, app_server, seeded_provi
     counts(page, 3, 2)
     page.get_by_role("button", name="Analyze update", exact=True).click()
     newest = drug_card(page).first
-    newest.get_by_label("Reviewed status").fill("Incomplete")
+    newest.get_by_label("Reviewed status").select_option("Incomplete")
     newest.get_by_role("button", name="Approve with corrections", exact=True).click()
     expect(indicator(page)).to_have_text("Overdue")
     counts(page, overdue=2)
     app_server.restart()
     page.reload()
+    open_history(page)
     expect(drug_row(page)).to_contain_text("Incomplete")
     expect(indicator(page)).to_have_text("Overdue")
     counts(page, overdue=2)
@@ -105,6 +106,7 @@ def test_monitoring_approval_reversal_and_restart(page, app_server, seeded_provi
     page.get_by_role("button", name="Analyze update", exact=True).click()
     page.get_by_label("Simulated role").select_option("manager")
     drug_card(page).first.get_by_role("button", name="Reject", exact=True).click()
+    expect(page.locator("#request-status")).to_contain_text("Manager decision saved")
     expect(drug_card(page).first).to_contain_text("Rejected")
     counts(page, overdue=2)
 

@@ -54,7 +54,8 @@ command passes the connection URL to `pg_dump` as a process argument. The commit
 using the same migrations and PostgreSQL 18 tools. Regenerate it there after schema
 changes; keep Neon credentials in the environment only.
 
-The schema has seven application tables. Seed the existing synthetic provider
+The schema has eight application tables, including immutable manual checklist edit
+history. Apply the checked-in migrations before using the updated app. Seed the existing synthetic provider
 explicitly with `uv run --env-file .env python -m app.seed`. Seeding again preserves
 existing checklist progress and does not add new template entries to an established
 checklist. Migrations and seeds never run at application startup.
@@ -88,6 +89,41 @@ or reject each suggestion independently. Only approved changes update the checkl
 Original proposals remain visible alongside the decision and its applied values.
 This role switch demonstrates permissions and does not authenticate a person.
 
+The **Updates** section accepts free-text updates. **Suggestions and review history**
+starts closed; choose its heading to open or close it. The visible pending count
+shows suggestions waiting for a decision. Analysis points you there without opening
+the section automatically. Normal refreshes and saved decisions preserve your
+choice; changing providers or reloading the page starts it closed again.
+
+The striped checklist has colored, labeled status badges. Green means a recognized
+finished status; blue is Pending, Scheduled, or Submitted; amber is Outstanding or
+Incomplete; unfamiliar values are neutral and retain Needs review monitoring.
+Color never replaces status text or changes completion rules. Red monitoring
+indicators still follow saved deadlines and the server's Hawaii date.
+
+In **Manager** mode, use a checklist row's **Edit** action to change **Status**,
+**Requirement date**, or **Deadline**, then **Save changes** or **Cancel**. Status
+uses a requirement-specific dropdown, including the existing value when unfamiliar.
+Dates are explicit full dates; clearing either date removes it on Save. Changing
+one date never substitutes it for the other. No-op/invalid drafts cannot be saved.
+Changing role/provider or choosing Refresh data discards unsaved drafts.
+Analyzing an update preserves an open manual edit when that requirement's saved
+version has not changed, including incomplete date input. Review dropdown choices
+preserve the exact saved/proposed status wording when selected or approved.
+
+Each direct save updates the checklist and appends a **Manager checklist edit**
+history entry atomically, with before/after values and time. It makes no model call
+and does not approve pending suggestions. Even a deadline-only save advances the
+checklist version: older pending suggestions must be reanalyzed before approval,
+and concurrent stale edits conflict rather than overwrite another manager's work.
+
+If a direct save response is lost, use **Retry checklist save**. The submitted values
+and operation identity stay frozen, including in this browser tab across reloads
+when browser storage is available. Return to that provider in Manager mode to retry;
+the retry cannot reapply changes over later progress. A confirmed save with a failed
+view refresh says it was saved; **Refresh data** or retry loads the saved state.
+Manual saves appear alongside updates and review decisions in newest-first history.
+
 In **Manager** mode, choose **Add provider**, enter a fictional name, choose a
 configured type, and optionally set a proposed start date. A single available type
 appears as text. Review the requirement preview, then save. Each provider receives
@@ -108,7 +144,7 @@ on retry. Cancel closes the form; it does not undo a save that already succeeded
 
 Each pending Manager decision shows the affected requirement as an editable
 checklist row. Highlighted cells and text identify differences from saved values;
-the original proposal remains visible while you correct **Reviewed status** or
+the original proposal remains visible while you select **Reviewed status** or
 **Reviewed date**. Requirement names and deadlines are read-only. The saved
 checklist and monitoring counts change only after approval.
 
@@ -155,7 +191,7 @@ start dates never substitute for deadlines; existing missing deadlines remain un
 The labeled as-of date describes the loaded snapshot. Loading a provider,
 **Refresh data**, and successful analysis/review reload monitoring; there is no
 automatic midnight refresh. Pending or rejected proposals and role switches leave
-the counts unchanged. A failed immediate refresh after a saved analysis/review retains
+the counts unchanged. A failed immediate refresh after a saved analysis/review/manual edit retains
 the whole previous snapshot and explains that saving succeeded. Provider selection,
 creation, and **Refresh data** clear the old snapshot before loading a new one, so
 a failed load cannot display another provider's checklist. An unavailable initial load

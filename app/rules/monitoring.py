@@ -4,46 +4,12 @@ from datetime import date
 
 from app.models import StoredProvider
 from app.monitoring_models import (
-    Completion,
     DeadlineState,
     MonitoringCounts,
     ProviderMonitoring,
     RequirementMonitoring,
 )
-
-_DENTIST_STATUS_RULES: dict[str, tuple[str, frozenset[str]]] = {
-    "Offer letter": ("signed", frozenset({"pending", "outstanding", "incomplete"})),
-    "Hawaii dental license": (
-        "received",
-        frozenset({"pending", "outstanding", "incomplete"}),
-    ),
-    "Drug screening": (
-        "completed",
-        frozenset({"scheduled", "pending", "outstanding", "incomplete"}),
-    ),
-    "State NED license": (
-        "received",
-        frozenset({"outstanding", "pending", "incomplete"}),
-    ),
-    "Insurance credentialing": (
-        "approved",
-        frozenset({"pending", "submitted", "outstanding", "incomplete"}),
-    ),
-}
-
-
-def classify_completion(
-    provider_type: str, requirement_name: str, status: str
-) -> Completion:
-    if provider_type != "Dentist" or requirement_name not in _DENTIST_STATUS_RULES:
-        return "needs_review"
-    finished, unfinished = _DENTIST_STATUS_RULES[requirement_name]
-    normalized = status.strip().casefold()
-    if normalized == finished:
-        return "finished"
-    if normalized in unfinished:
-        return "outstanding"
-    return "needs_review"
+from app.rules.statuses import classify_completion
 
 
 def classify_deadline(deadline: date | None, as_of_date: date) -> DeadlineState:
