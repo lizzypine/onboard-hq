@@ -138,7 +138,8 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved}) {
     };
   }
 
-  function draw() {
+  function draw(preservedEditor = null) {
+    const preservedSync = syncDraft;
     body.replaceChildren();
     syncDraft = null;
     document.getElementById("checklist-action-heading").hidden = roleSelect.value !== "manager";
@@ -170,14 +171,27 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved}) {
           body.querySelector(".checklist-fields select").focus();
         });
       }
-      if (editId === requirement.id) renderEditor(row, requirement, catalog.get(requirement.id)?.statuses || [requirement.status]);
+      if (editId === requirement.id) {
+        if (preservedEditor) { row.after(preservedEditor); syncDraft = preservedSync; }
+        else renderEditor(row, requirement, catalog.get(requirement.id)?.statuses || [requirement.status]);
+      }
     });
     syncControls();
   }
 
   retry.addEventListener("click", sendAttempt);
   return {
-    render(nextProvider, nextMonitoring, nextOptions) { provider = nextProvider; monitoring = nextMonitoring; options = nextOptions; editId = null; draft = null; draw(); },
+    render(nextProvider, nextMonitoring, nextOptions) {
+      const previous = provider?.requirements.find(r => r.id === editId);
+      const next = nextProvider?.requirements.find(r => r.id === editId);
+      const unchanged = provider?.id === nextProvider?.id && previous && next && previous.version === next.version;
+      const preservedEditor = unchanged ? body.querySelector(".requirement-editor") : null;
+      if (!preservedEditor) { editId = null; draft = null; }
+      provider = nextProvider;
+      monitoring = nextMonitoring;
+      options = nextOptions;
+      draw(preservedEditor);
+    },
     setBusy(value) { busy = value; syncControls(); },
     resetDraft() { editId = null; draft = null; draw(); },
     syncRole() { editId = null; draft = null; draw(); },

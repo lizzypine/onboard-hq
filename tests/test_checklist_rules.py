@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.checklist_models import ChecklistEditRequest
-from app.models import StoredRequirement
+from app.models import ReviewRequest, StoredRequirement
 from app.rules.checklist import (
     ChecklistEditConflict,
     ChecklistEditForbidden,
@@ -32,6 +32,11 @@ def test_direct_edit_preserves_verbatim_status():
     body = payload()
     body["status"] = "  rEcEiVeD  "
     assert ChecklistEditRequest.model_validate(body).status == "  rEcEiVeD  "
+
+
+def test_review_correction_preserves_verbatim_dropdown_status():
+    request = ReviewRequest(action="correct", corrected_status="  sChEdUlEd  ")
+    assert request.corrected_status == "  sChEdUlEd  "
 
 
 @pytest.mark.parametrize(

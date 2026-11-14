@@ -384,3 +384,90 @@ def test_editor_keyboard_and_header_position_at_desktop_and_phone(
         .evaluate("e => e.getBoundingClientRect().height < 40")
     )
     page.screenshot(path=tmp_path / "checklist-edit-narrow.png", full_page=True)
+
+
+@pytest.mark.parametrize("preserved_source", ["saved", "proposed"])
+def test_review_saves_verbatim_status_options(
+    page, app_server, seeded_provider, preserved_source
+):
+    saved_status, proposed_status = "  sChEdUlEd  ", "  cOmPlEtEd  "
+    if preserved_source == "saved":
+        with psycopg.connect(configured_test_url()) as conn:
+            conn.execute(
+                "UPDATE requirements SET status=%s WHERE provider_id=%s AND name='Drug screening'",
+                (saved_status, seeded_provider.id),
+            )
+    load(page, app_server)
+    page.get_by_label("Original update", exact=True).fill("Drug screening completed.")
+    page.get_by_role("button", name="Analyze update", exact=True).click()
+    expect(history(page).locator("summary")).to_contain_text("1 pending suggestion")
+    if preserved_source == "proposed":
+        with psycopg.connect(configured_test_url()) as conn:
+            conn.execute(
+                "UPDATE suggestions SET proposed_status=%s WHERE provider_id=%s",
+                (proposed_status, seeded_provider.id),
+            )
+        page.get_by_role("button", name="Refresh data", exact=True).click()
+    page.get_by_label("Simulated role", exact=True).select_option("manager")
+    open_history(page)
+    card = page.get_by_role("article", name="Drug screening", exact=True)
+    reviewed = card.get_by_role("combobox", name="Reviewed status", exact=True)
+    if preserved_source == "saved":
+        reviewed.select_option(saved_status)
+        expected, action = saved_status, "Approve with corrections"
+    else:
+        expect(reviewed).to_have_value(proposed_status)
+        expect(card.get_by_role("button", name="Approve", exact=True)).to_be_enabled()
+        expected, action = proposed_status, "Approve"
+    with page.expect_request(
+        lambda r: r.method == "POST" and r.url.endswith("/review")
+    ) as request:
+        card.get_by_role("button", name=action, exact=True).click()
+    if preserved_source == "saved":
+        assert request.value.post_data_json["corrected_status"] == expected
+    expect(page.locator("#request-status")).to_contain_text("Manager decision saved")
+    current = next(
+        r
+        for r in read_provider(page, app_server, seeded_provider.id)["requirements"]
+        if r["name"] == "Drug screening"
+    )
+    assert current["status"] == expected
+    updates = page.request.get(
+        app_server.url + f"/providers/{seeded_provider.id}/updates"
+    ).json()
+    assert updates[0]["suggestions"][0]["decision"]["applied_status"] == expected
+
+
+@pytest.mark.parametrize("scenario", ["completed", "failure"])
+def test_analysis_preserves_unsaved_manual_editor_including_partial_date(
+    page, app_server, scenario
+):
+    if scenario == "failure":
+        app_server.restart("failure")
+    group = open_editor(page, app_server)
+    group.get_by_role("combobox", name="Checklist status", exact=True).select_option(
+        "Incomplete"
+    )
+    group.get_by_label("Deadline", exact=True).fill("2026-12-01")
+    partial = group.get_by_label("Requirement date", exact=True)
+    partial.fill("2026-11-12")
+    partial.press("Home")
+    partial.press("Delete")
+    assert partial.evaluate("e => e.validity.badInput")
+    page.get_by_label("Original update", exact=True).fill("Drug screening completed.")
+    page.get_by_role("button", name="Analyze update", exact=True).click()
+    expect(page.get_by_label("Simulated role", exact=True)).to_be_enabled()
+    expect(page.locator("#request-status")).not_to_have_text("Analyzing update…")
+    expect(group).to_be_visible()
+    expect(
+        group.get_by_role("combobox", name="Checklist status", exact=True)
+    ).to_have_value("Incomplete")
+    expect(group.get_by_label("Deadline", exact=True)).to_have_value("2026-12-01")
+    assert partial.evaluate("e => e.validity.badInput")
+    expect(
+        group.get_by_role("button", name="Save changes", exact=True)
+    ).to_be_disabled()
+    partial.fill("2026-11-12")
+    save_editor(page, group)
+    expect(row(page)).to_contain_text("Incomplete")
+    expect(row(page)).to_contain_text("2026-12-01")

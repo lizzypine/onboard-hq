@@ -27,7 +27,7 @@ function editableCell(row, name, type, saved, initial, proposed, field, choices 
 }
 
 function compare(field, isDate = false) {
-  const value = isDate ? field.input.value : field.input.value.trim();
+  const value = field.input.value;
   const invalidDate = isDate && !field.input.checkValidity();
   field.cell.classList.toggle("review-invalid", invalidDate);
   if (isDate) field.input.setAttribute("aria-invalid", String(invalidDate));
@@ -96,7 +96,7 @@ export function renderReviewControls(card, suggestion, current, {busy, onDecide,
   function sync() {
     compare(status);
     compare(date, true);
-    const edited = status.input.value.trim() !== suggestion.proposed_status || dateAction() !== "preserve";
+    const edited = status.input.value !== suggestion.proposed_status || dateAction() !== "preserve";
     const confirmed = !confirmation || (confirmation.checked && date.input.value);
     const invalid = stale || !status.input.value.trim() || !date.input.checkValidity() || !confirmed;
     approve.disabled = Boolean(invalid || edited);
@@ -112,7 +112,7 @@ export function renderReviewControls(card, suggestion, current, {busy, onDecide,
   approve.addEventListener("click", () => onDecide(suggestion, {action: "approve", date_confirmed: Boolean(confirmation?.checked)}));
   correct.addEventListener("click", () => {
     const body = {action: "correct", date_confirmed: Boolean(confirmation?.checked)};
-    if (status.input.value.trim() !== suggestion.proposed_status) body.corrected_status = status.input.value.trim();
+    if (status.input.value !== suggestion.proposed_status) body.corrected_status = status.input.value;
     const action = dateAction();
     if (action !== "preserve") body.date_action = action;
     if (action === "set") body.corrected_date = date.input.value;

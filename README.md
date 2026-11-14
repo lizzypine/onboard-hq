@@ -107,6 +107,9 @@ uses a requirement-specific dropdown, including the existing value when unfamili
 Dates are explicit full dates; clearing either date removes it on Save. Changing
 one date never substitutes it for the other. No-op/invalid drafts cannot be saved.
 Changing role/provider or choosing Refresh data discards unsaved drafts.
+Analyzing an update preserves an open manual edit when that requirement's saved
+version has not changed, including incomplete date input. Review dropdown choices
+preserve the exact saved/proposed status wording when selected or approved.
 
 Each direct save updates the checklist and appends a **Manager checklist edit**
 history entry atomically, with before/after values and time. It makes no model call
