@@ -83,6 +83,7 @@ def to_provider_context(provider: StoredProvider) -> ProviderContext:
 
 
 NonBlank = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+VerbatimStatus = Annotated[str, StringConstraints(pattern=r"\S")]
 FailureCategory = Literal["configuration", "timeout", "model"]
 
 
@@ -138,7 +139,7 @@ DemoRole = Literal["proposer", "manager"]
 class ReviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     action: Literal["approve", "correct", "reject"]
-    corrected_status: NonBlank | None = None
+    corrected_status: VerbatimStatus | None = None
     date_action: Literal["preserve", "set", "clear"] = "preserve"
     corrected_date: date | None = None
     date_confirmed: StrictBool = False

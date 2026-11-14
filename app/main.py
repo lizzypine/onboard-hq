@@ -12,6 +12,8 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.agent import build_agent
+from app.checklist import edit_checklist
+from app.checklist_models import ChecklistEdit, ChecklistEditRequest
 from app.database import (
     DatabaseConfigurationError,
     DatabasePool,
@@ -34,10 +36,16 @@ from app.page import PAGE
 from app.provider_models import CreateProviderRequest, ProviderTypeTemplate
 from app.providers import add_provider
 from app.repository import RecordNotFound
+from app.repository.checklist import ChecklistRepository
 from app.repository.providers import ProviderRepository
 from app.repository.reviews import ReviewRepository
 from app.repository.updates import UpdateConflict, UpdateRepository
 from app.reviews import AgentFactory, review_suggestion, submit_update
+from app.rules.checklist import (
+    ChecklistEditConflict,
+    ChecklistEditForbidden,
+    ChecklistEditInvalid,
+)
 from app.rules.providers import ProviderCreationConflict, ProviderCreationForbidden
 from app.rules.review import ReviewConflict, ReviewForbidden, ReviewValidationError
 
@@ -134,6 +142,32 @@ async def index() -> str:
     return PAGE
 
 
+@router.get(
+    "/providers/{provider_id}/checklist-edits", response_model=list[ChecklistEdit]
+)
+async def checklist_history(
+    provider_id: UUID, pool: Annotated[DatabasePool, Depends(get_pool)]
+) -> list[ChecklistEdit]:
+    return await ChecklistRepository(pool).list_for_provider(provider_id)
+
+
+@router.post(
+    "/providers/{provider_id}/requirements/{requirement_id}/edits",
+    response_model=ChecklistEdit,
+    status_code=201,
+)
+async def save_checklist_edit(
+    provider_id: UUID,
+    requirement_id: UUID,
+    request: ChecklistEditRequest,
+    pool: Annotated[DatabasePool, Depends(get_pool)],
+    role: Annotated[DemoRole, Header(alias="X-Demo-Role")] = "proposer",
+) -> ChecklistEdit:
+    return await edit_checklist(
+        ChecklistRepository(pool), provider_id, requirement_id, request, role
+    )
+
+
 def get_agent_factory() -> AgentFactory:
     """Construct the configured agent only after persisting a claimed update."""
     return build_agent
@@ -217,6 +251,9 @@ def create_app() -> FastAPI:
     application.add_exception_handler(ProviderCreationConflict, review_conflict)
     application.add_exception_handler(ReviewConflict, review_conflict)
     application.add_exception_handler(ReviewValidationError, review_invalid)
+    application.add_exception_handler(ChecklistEditForbidden, review_forbidden)
+    application.add_exception_handler(ChecklistEditConflict, review_conflict)
+    application.add_exception_handler(ChecklistEditInvalid, review_invalid)
     return application
 
 

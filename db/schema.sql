@@ -15,9 +15,51 @@ SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
 
+--
+-- Name: preserve_checklist_edit(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.preserve_checklist_edit() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    RAISE EXCEPTION 'Checklist edit history is immutable.';
+END;
+$$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
+
+--
+-- Name: checklist_edits; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.checklist_edits (
+    id uuid NOT NULL,
+    provider_id uuid NOT NULL,
+    requirement_id uuid NOT NULL,
+    requirement_name text NOT NULL,
+    expected_version integer NOT NULL,
+    resulting_version integer NOT NULL,
+    previous_status text NOT NULL,
+    previous_scheduled_date date,
+    previous_deadline date,
+    applied_status text NOT NULL,
+    applied_scheduled_date date,
+    applied_deadline date,
+    reviewer_role text NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT checklist_edits_applied_status_check CHECK ((btrim(applied_status) <> ''::text)),
+    CONSTRAINT checklist_edits_check CHECK ((resulting_version = (expected_version + 1))),
+    CONSTRAINT checklist_edits_check1 CHECK ((((previous_status IS DISTINCT FROM applied_status) OR (previous_scheduled_date IS DISTINCT FROM applied_scheduled_date)) OR (previous_deadline IS DISTINCT FROM applied_deadline))),
+    CONSTRAINT checklist_edits_expected_version_check CHECK ((expected_version >= 0)),
+    CONSTRAINT checklist_edits_previous_status_check CHECK ((btrim(previous_status) <> ''::text)),
+    CONSTRAINT checklist_edits_requirement_name_check CHECK ((btrim(requirement_name) <> ''::text)),
+    CONSTRAINT checklist_edits_reviewer_role_check CHECK ((reviewer_role = 'manager'::text))
+);
+
 
 --
 -- Name: provider_types; Type: TABLE; Schema: public; Owner: -
@@ -152,6 +194,14 @@ CREATE TABLE public.updates (
     CONSTRAINT updates_processing_state_check CHECK ((processing_state = ANY (ARRAY['processing'::text, 'completed'::text, 'failed'::text]))),
     CONSTRAINT updates_provider_snapshot_check CHECK ((jsonb_typeof(provider_snapshot) = 'object'::text))
 );
+
+
+--
+-- Name: checklist_edits checklist_edits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.checklist_edits
+    ADD CONSTRAINT checklist_edits_pkey PRIMARY KEY (id);
 
 
 --
@@ -291,6 +341,13 @@ ALTER TABLE ONLY public.updates
 
 
 --
+-- Name: checklist_edits_provider_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX checklist_edits_provider_created ON public.checklist_edits USING btree (provider_id, created_at, id);
+
+
+--
 -- Name: suggestions_requirement; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -309,6 +366,21 @@ CREATE INDEX suggestions_update ON public.suggestions USING btree (update_id);
 --
 
 CREATE INDEX updates_provider_created ON public.updates USING btree (provider_id, created_at, id);
+
+
+--
+-- Name: checklist_edits preserve_checklist_edit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER preserve_checklist_edit BEFORE DELETE OR UPDATE ON public.checklist_edits FOR EACH ROW EXECUTE FUNCTION public.preserve_checklist_edit();
+
+
+--
+-- Name: checklist_edits checklist_edits_requirement_id_provider_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.checklist_edits
+    ADD CONSTRAINT checklist_edits_requirement_id_provider_id_fkey FOREIGN KEY (requirement_id, provider_id) REFERENCES public.requirements(id, provider_id);
 
 
 --
@@ -387,4 +459,5 @@ ALTER TABLE ONLY public.updates
 --
 
 INSERT INTO public.schema_migrations (version) VALUES
-    ('20261111000100');
+    ('20261111000100'),
+    ('20261112000100');

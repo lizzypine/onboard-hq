@@ -25,7 +25,7 @@ def connection():
         conn.rollback()
 
 
-def test_migrations_create_seven_application_tables(connection):
+def test_migrations_create_eight_application_tables(connection):
     tables = {
         row[0]
         for row in connection.execute(
@@ -40,6 +40,7 @@ def test_migrations_create_seven_application_tables(connection):
         "updates",
         "suggestions",
         "review_decisions",
+        "checklist_edits",
     } <= tables
 
 
@@ -129,21 +130,28 @@ def test_suggestion_has_only_one_terminal_decision(connection, links):
 def test_rollback_and_reapply_on_separate_disposable_database():
     with disposable_database() as url:
         migrate_test_database(url)
-        result = subprocess.run(
-            [str(ROOT / ".superpowers/bin/dbmate"), "--no-dump-schema", "rollback"],
-            cwd=ROOT,
-            env={**os.environ, "DATABASE_URL": url},
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert result.returncode == 0, (
-            "Rollback must succeed on the disposable database"
-        )
-        with psycopg.connect(url) as conn:
-            assert conn.execute(
-                "SELECT to_regclass('public.providers')"
-            ).fetchone() == (None,)
+        for remaining in ("providers", None):
+            result = subprocess.run(
+                [str(ROOT / ".superpowers/bin/dbmate"), "--no-dump-schema", "rollback"],
+                cwd=ROOT,
+                env={**os.environ, "DATABASE_URL": url},
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert result.returncode == 0, (
+                "Rollback must succeed on the disposable database"
+            )
+            with psycopg.connect(url) as conn:
+                assert conn.execute(
+                    "SELECT to_regclass('public.providers')"
+                ).fetchone() == (remaining,)
+                assert conn.execute(
+                    "SELECT to_regclass('public.checklist_edits')"
+                ).fetchone() == (None,)
         migrate_test_database(url)
         with psycopg.connect(url) as conn:
             assert conn.execute("SELECT count(*) FROM providers").fetchone() == (0,)
+            assert conn.execute("SELECT count(*) FROM checklist_edits").fetchone() == (
+                0,
+            )

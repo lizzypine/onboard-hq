@@ -61,10 +61,11 @@ def test_review_row_highlights_proposed_status_and_keeps_evidence(
     changed(field_cell(table, "date"), False)
     expect(table.get_by_role("cell").first).to_have_text("Drug screening")
     expect(table.get_by_role("cell").last).to_have_text("Not set")
-    expect(table.locator("input")).to_have_count(2)
+    expect(table.locator("input")).to_have_count(1)
+    expect(table.get_by_role("combobox", name="Reviewed status", exact=True)).to_be_visible()
     expect(page.get_by_label("Date change", exact=True)).to_have_count(0)
     before = saved_dashboard(page, app_server, seeded_provider)
-    table.get_by_label("Reviewed status", exact=True).fill("Incomplete")
+    table.get_by_label("Reviewed status", exact=True).select_option("Incomplete")
     expect(status).to_contain_text("Your correction")
     expect(status).to_contain_text("Originally proposed: Completed")
     expect(drug_row(page)).to_contain_text("Scheduled")
@@ -73,7 +74,7 @@ def test_review_row_highlights_proposed_status_and_keeps_evidence(
 
 def test_return_to_saved_status_is_a_correction_without_highlight(page, app_server):
     table = manager_review(page, app_server)
-    table.get_by_label("Reviewed status", exact=True).fill("Scheduled")
+    table.get_by_label("Reviewed status", exact=True).select_option("Scheduled")
     changed(field_cell(table, "status"), False)
     expect(field_cell(table, "status")).to_contain_text("Unchanged")
     expect(drug_card(page).get_by_role("button", name="Approve", exact=True)).to_be_disabled()

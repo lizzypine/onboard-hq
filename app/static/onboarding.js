@@ -2,6 +2,7 @@
 
 import {renderReviewControls} from "./review.js";
 import {providerLabel, setupProviderCreation} from "./providers.js";
+import {setupChecklist} from "./checklist.js";
 
 const providerSelect = document.getElementById("provider");
 const roleSelect = document.getElementById("demo-role");
@@ -10,8 +11,11 @@ const refreshButton = document.getElementById("refresh-data");
 const updateText = document.getElementById("update-text");
 const status = document.getElementById("request-status");
 const results = document.getElementById("review-results");
-const state = {provider: null, monitoring: null, history: [], busy: false, generation: 0, pending: null, preferredProviderId: null};
+const state = {provider: null, monitoring: null, history: [], edits: [], checklistOptions: [], busy: false, generation: 0, pending: null, preferredProviderId: null};
 let creation = null;
+let checklist = null;
+const disclosure = document.getElementById("review-disclosure");
+disclosure.open = false;
 
 function text(parent, tag, value) {
   const element = document.createElement(tag);
@@ -42,15 +46,7 @@ function setBusy(value) {
   submitButton.disabled = value || !state.provider;
   document.querySelectorAll(".review-fields").forEach(element => { element.disabled = value; });
   creation?.setBusy(value);
-}
-
-function monitoringLabel(indicator) {
-  if (indicator.completion === "finished") return "Finished";
-  if (indicator.completion === "needs_review") {
-    return indicator.deadline_state === "past" ? "Deadline passed — needs review" : "Needs review";
-  }
-  if (indicator.deadline_state === "past") return "Overdue";
-  return indicator.deadline_state === "due_today" ? "Outstanding — due today" : "Outstanding";
+  checklist?.setBusy(value);
 }
 
 function renderMonitoring() {
@@ -64,23 +60,11 @@ function renderMonitoring() {
 }
 
 function renderChecklist() {
-  const body = document.getElementById("requirements");
-  body.replaceChildren();
   document.getElementById("provider-description").textContent =
     state.provider ? state.provider.provider_type + " · Proposed start: " + (state.provider.proposed_start_date || "Not set") : "";
   renderMonitoring();
   document.getElementById("empty-checklist").hidden = !state.provider || state.provider.requirements.length > 0;
-  if (!state.provider) return;
-  const indicators = new Map(state.monitoring.requirements.map(row => [row.requirement_id, row]));
-  for (const requirement of state.provider.requirements) {
-    const row = text(body, "tr", "");
-    [requirement.name, requirement.status, requirement.scheduled_date || "Not set", requirement.deadline || "Not set"]
-      .forEach(value => text(row, "td", value));
-    const indicator = indicators.get(requirement.id);
-    const cell = text(row, "td", monitoringLabel(indicator));
-    const style = indicator.completion === "outstanding" && indicator.deadline_state === "past" ? "overdue" : indicator.completion;
-    cell.className = "indicator " + style;
-  }
+  checklist?.render(state.provider, state.monitoring, state.checklistOptions);
 }
 
 function option(select, value, label) {
@@ -132,14 +116,21 @@ function renderSuggestion(parent, suggestion, completed) {
     text(card, "p", "Reviewed: " + new Date(decision.reviewed_at).toLocaleString());
   } else if (canReview) {
     renderReviewControls(card, suggestion, state.provider.requirements.find(r => r.id === suggestion.requirement_id),
-      {busy: state.busy, onDecide: decide});
+      {busy: state.busy, onDecide: decide,
+        statusChoices: state.checklistOptions.find(r => r.requirement_id === suggestion.requirement_id)?.statuses || []});
   } else text(card, "p", completed ? "Awaiting manager review." : "Analysis is unfinished; this cannot be reviewed.");
 }
 
 function renderHistory() {
   results.replaceChildren();
-  if (!state.history.length) text(results, "p", "No saved updates yet.");
-  for (const update of state.history) {
+  const pending = state.history.reduce((count, update) => count + (update.processing_state === "completed" ? update.suggestions.filter(s => !s.decision).length : 0), 0);
+  document.getElementById("pending-suggestions").textContent = pending + " pending suggestion" + (pending === 1 ? "" : "s") + (state.edits.length ? " · " + state.edits.length + " checklist edit" + (state.edits.length === 1 ? "" : "s") : "");
+  if (!state.history.length && !state.edits.length) text(results, "p", "No saved updates yet.");
+  const entries = [...state.history.map(record => ({kind: "update", record})), ...state.edits.map(record => ({kind: "edit", record}))]
+    .sort((a, b) => Date.parse(b.record.created_at) - Date.parse(a.record.created_at) || b.record.id.localeCompare(a.record.id));
+  for (const entry of entries) {
+    if (entry.kind === "edit") { renderManualEdit(entry.record); continue; }
+    const update = entry.record;
     const group = text(results, "div", "");
     group.className = "update";
     text(group, "h3", "Original update");
@@ -155,16 +146,31 @@ function renderHistory() {
   }
 }
 
+function renderManualEdit(edit) {
+  const card = text(results, "article", "");
+  card.className = "update manual-edit-history";
+  card.setAttribute("aria-label", "Manager checklist edit: " + edit.requirement_name);
+  text(card, "h3", "Manager checklist edit");
+  text(card, "p", edit.requirement_name);
+  for (const [label, field] of [["Status", "status"], ["Requirement date", "scheduled_date"], ["Deadline", "deadline"]]) {
+    if (edit["previous_" + field] !== edit["applied_" + field]) text(card, "p", label + ": " + (edit["previous_" + field] || "Not set") + " → " + (edit["applied_" + field] || "Not set"));
+  }
+  text(card, "p", "Saved by simulated Manager: " + new Date(edit.created_at).toLocaleString());
+}
+
 async function loadState() {
   const id = providerSelect.value;
   const generation = ++state.generation;
-  const [dashboard, history] = await Promise.all([api("/providers/" + id + "/dashboard"), api("/providers/" + id + "/updates")]);
+  const [dashboard, history, edits] = await Promise.all([api("/providers/" + id + "/dashboard"), api("/providers/" + id + "/updates"), api("/providers/" + id + "/checklist-edits")]);
   if (generation !== state.generation || providerSelect.value !== id) return;
   state.provider = dashboard.provider;
   state.monitoring = dashboard.monitoring;
   state.history = history;
+  state.edits = edits;
+  state.checklistOptions = dashboard.checklist_options;
   renderChecklist();
   renderHistory();
+  checklist?.onSnapshotLoaded();
 }
 
 function clearSnapshot() {
@@ -172,6 +178,8 @@ function clearSnapshot() {
   state.provider = null;
   state.monitoring = null;
   state.history = [];
+  state.edits = [];
+  state.checklistOptions = [];
   renderChecklist();
   renderHistory();
 }
@@ -215,7 +223,7 @@ document.getElementById("update-form").addEventListener("submit", async event =>
     saved = true;
     await loadState();
     state.pending = null;
-    status.textContent = "Update and suggestions saved. Awaiting manager review.";
+    status.textContent = "Update and suggestions saved. Open Suggestions and review history to review pending suggestions.";
   } catch (error) {
     if (error.savedUpdateId) state.pending = null;
     if (!saved) {
@@ -226,18 +234,21 @@ document.getElementById("update-form").addEventListener("submit", async event =>
 });
 
 updateText.addEventListener("input", () => { state.pending = null; });
+checklist = setupChecklist({api, roleSelect, setBusy, onSaved: loadState});
 creation = setupProviderCreation({api, roleSelect, setBusy, onCreated: async id => {
   state.preferredProviderId = id;
   updateText.value = "";
   state.pending = null;
+  disclosure.open = false;
   if (!await initialize(id)) throw new Error("Saved provider could not load.");
   providerSelect.focus();
 }});
-roleSelect.addEventListener("change", () => { renderHistory(); creation.syncRole(); });
+roleSelect.addEventListener("change", () => { renderHistory(); creation.syncRole(); checklist.syncRole(); });
 providerSelect.addEventListener("change", () => {
   state.preferredProviderId = null;
   updateText.value = "";
   state.pending = null;
+  disclosure.open = false;
   initialize();
 });
 refreshButton.addEventListener("click", () => initialize());
