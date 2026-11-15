@@ -23,6 +23,12 @@ CREATE FUNCTION public.preserve_checklist_edit() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
+    -- A missing provider identifies its cascading deletion in this transaction.
+    IF TG_OP = 'DELETE' AND NOT EXISTS (
+        SELECT 1 FROM providers WHERE id = OLD.provider_id
+    ) THEN
+        RETURN OLD;
+    END IF;
     RAISE EXCEPTION 'Checklist edit history is immutable.';
 END;
 $$;
@@ -380,7 +386,7 @@ CREATE TRIGGER preserve_checklist_edit BEFORE DELETE OR UPDATE ON public.checkli
 --
 
 ALTER TABLE ONLY public.checklist_edits
-    ADD CONSTRAINT checklist_edits_requirement_id_provider_id_fkey FOREIGN KEY (requirement_id, provider_id) REFERENCES public.requirements(id, provider_id);
+    ADD CONSTRAINT checklist_edits_requirement_id_provider_id_fkey FOREIGN KEY (requirement_id, provider_id) REFERENCES public.requirements(id, provider_id) ON DELETE CASCADE;
 
 
 --
@@ -388,7 +394,7 @@ ALTER TABLE ONLY public.checklist_edits
 --
 
 ALTER TABLE ONLY public.providers
-    ADD CONSTRAINT providers_provider_type_id_fkey FOREIGN KEY (provider_type_id) REFERENCES public.provider_types(id);
+    ADD CONSTRAINT providers_provider_type_id_fkey FOREIGN KEY (provider_type_id) REFERENCES public.provider_types(id) ON DELETE RESTRICT;
 
 
 --
@@ -396,7 +402,7 @@ ALTER TABLE ONLY public.providers
 --
 
 ALTER TABLE ONLY public.requirement_templates
-    ADD CONSTRAINT requirement_templates_provider_type_id_fkey FOREIGN KEY (provider_type_id) REFERENCES public.provider_types(id);
+    ADD CONSTRAINT requirement_templates_provider_type_id_fkey FOREIGN KEY (provider_type_id) REFERENCES public.provider_types(id) ON DELETE RESTRICT;
 
 
 --
@@ -404,7 +410,7 @@ ALTER TABLE ONLY public.requirement_templates
 --
 
 ALTER TABLE ONLY public.requirements
-    ADD CONSTRAINT requirements_provider_id_provider_type_id_fkey FOREIGN KEY (provider_id, provider_type_id) REFERENCES public.providers(id, provider_type_id);
+    ADD CONSTRAINT requirements_provider_id_provider_type_id_fkey FOREIGN KEY (provider_id, provider_type_id) REFERENCES public.providers(id, provider_type_id) ON DELETE CASCADE;
 
 
 --
@@ -412,7 +418,7 @@ ALTER TABLE ONLY public.requirements
 --
 
 ALTER TABLE ONLY public.requirements
-    ADD CONSTRAINT requirements_source_template_id_provider_type_id_fkey FOREIGN KEY (source_template_id, provider_type_id) REFERENCES public.requirement_templates(id, provider_type_id);
+    ADD CONSTRAINT requirements_source_template_id_provider_type_id_fkey FOREIGN KEY (source_template_id, provider_type_id) REFERENCES public.requirement_templates(id, provider_type_id) ON DELETE RESTRICT;
 
 
 --
@@ -420,7 +426,7 @@ ALTER TABLE ONLY public.requirements
 --
 
 ALTER TABLE ONLY public.review_decisions
-    ADD CONSTRAINT review_decisions_suggestion_id_fkey FOREIGN KEY (suggestion_id) REFERENCES public.suggestions(id);
+    ADD CONSTRAINT review_decisions_suggestion_id_fkey FOREIGN KEY (suggestion_id) REFERENCES public.suggestions(id) ON DELETE CASCADE;
 
 
 --
@@ -428,7 +434,7 @@ ALTER TABLE ONLY public.review_decisions
 --
 
 ALTER TABLE ONLY public.suggestions
-    ADD CONSTRAINT suggestions_requirement_id_provider_id_fkey FOREIGN KEY (requirement_id, provider_id) REFERENCES public.requirements(id, provider_id);
+    ADD CONSTRAINT suggestions_requirement_id_provider_id_fkey FOREIGN KEY (requirement_id, provider_id) REFERENCES public.requirements(id, provider_id) ON DELETE CASCADE;
 
 
 --
@@ -436,7 +442,7 @@ ALTER TABLE ONLY public.suggestions
 --
 
 ALTER TABLE ONLY public.suggestions
-    ADD CONSTRAINT suggestions_update_id_provider_id_fkey FOREIGN KEY (update_id, provider_id) REFERENCES public.updates(id, provider_id);
+    ADD CONSTRAINT suggestions_update_id_provider_id_fkey FOREIGN KEY (update_id, provider_id) REFERENCES public.updates(id, provider_id) ON DELETE CASCADE;
 
 
 --
@@ -444,7 +450,7 @@ ALTER TABLE ONLY public.suggestions
 --
 
 ALTER TABLE ONLY public.updates
-    ADD CONSTRAINT updates_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES public.providers(id);
+    ADD CONSTRAINT updates_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES public.providers(id) ON DELETE CASCADE;
 
 
 --
@@ -460,4 +466,5 @@ ALTER TABLE ONLY public.updates
 
 INSERT INTO public.schema_migrations (version) VALUES
     ('20261111000100'),
-    ('20261112000100');
+    ('20261112000100'),
+    ('20261114000100');
