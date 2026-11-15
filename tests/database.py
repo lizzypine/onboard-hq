@@ -11,6 +11,8 @@ import psycopg
 from psycopg import ProgrammingError, sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
+from tests.local_postgres import local_database_url
+
 ROOT = Path(__file__).resolve().parents[1]
 APPLICATION_DATABASE_URL = os.environ.get("DATABASE_URL")
 
@@ -46,11 +48,9 @@ def require_disposable_database(test_url: str, application_url: str | None) -> N
 
 
 def configured_test_url() -> str:
-    value = os.environ.get("TEST_DATABASE_URL", "")
-    if not value:
-        raise ValueError(
-            "Run bash scripts/test.sh uv run pytest to configure PostgreSQL tests."
-        )
+    value = os.environ.get("TEST_DATABASE_URL")
+    if value is None:
+        value = local_database_url()
     require_disposable_database(value, APPLICATION_DATABASE_URL)
     return value
 

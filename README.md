@@ -33,11 +33,14 @@ the synthetic Dentist templates); analysis also requires the model settings. Aut
 ```sh
 uv run ruff check
 uv run mypy
-bash scripts/test.sh uv run pytest
+uv run pytest
 ```
 
 ## Database and test setup
 
+Install Node.js 22 and run `npm ci` for the pinned `npx dbmate` command.
+Copy `.env.example` to `.env` and fill in local settings; the example contains
+setting names only. Set `DBMATE_NO_DUMP_SCHEMA=true` in `.env`.
 Install PostgreSQL 18 tools (on macOS: `brew install postgresql@18`), then run
 `bash scripts/install-dbmate.sh` to install checksum-verified dbmate 2.38.1 in
 the ignored `.superpowers/bin` directory. Set `DATABASE_URL` to Neon's pooled
@@ -45,7 +48,7 @@ connection and `DATABASE_URL_UNPOOLED` to its direct connection in `.env`.
 Run schema migrations explicitly, with PostgreSQL 18's tools on PATH:
 
 ```sh
-PATH="$(brew --prefix postgresql@18)/bin:.superpowers/bin:$PATH" dbmate --no-dump-schema -e DATABASE_URL_UNPOOLED migrate
+npx dbmate --no-dump-schema -e DATABASE_URL_UNPOOLED migrate
 ```
 
 Disable dbmate's automatic schema dump for credentialed connections: its dump
@@ -56,19 +59,35 @@ changes; keep Neon credentials in the environment only.
 
 The schema has eight application tables, including immutable manual checklist edit
 history. Apply the checked-in migrations before using the updated app. Seed the existing synthetic provider
-explicitly with `uv run --env-file .env python -m app.seed`. Seeding again preserves
+explicitly with `uv run --env-file .env python -m db.seed`. Seeding again preserves
 existing checklist progress and does not add new template entries to an established
 checklist. Migrations and seeds never run at application startup.
+
+The migrations under `db/migrations/` create the tables. `db/queries.py` provides
+`fetch_provider`, the application's parameterized query for one provider and their
+linked checklist; `tests/test_queries.py` tests it against an isolated database.
+The old `python -m app.seed` entry point remains compatible. After migrating and
+seeding the development database, verify its migration status:
+
+```sh
+npx dbmate status
+```
+
+It should report `Pending: 0`. Seeding prints `Synthetic provider seed complete.`
+and supplies Dr. Kekoa Ejemplo with five checklist rows in an empty database.
 
 Install the pinned Playwright browser once, then run all unit, PostgreSQL
 integration, and real-browser end-to-end tests:
 
 ```sh
 PLAYWRIGHT_BROWSERS_PATH="$PWD/.superpowers/browsers" uv run playwright install chromium
-bash scripts/test.sh uv run pytest
+uv run pytest
 ```
 
-This starts and removes a temporary loopback PostgreSQL 18 cluster. Set
+Bare pytest lazily starts a temporary loopback PostgreSQL 18 cluster when a
+database test needs it and removes it at session teardown, including test failures.
+Pure tests do not start a server. The existing `bash scripts/test.sh uv run pytest`
+wrapper is also supported. Set
 `PG18_BIN` if its binaries are elsewhere. CI supplies a separate PostgreSQL
 service through `TEST_DATABASE_URL`. Tests refuse remote targets and databases
 without the `onboard_hq_test_` prefix. Never use the Neon application URL for tests.

@@ -1,0 +1,8 @@
+{
+  "name": "onboard-hq-development-tools",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "dbmate": "2.38.1"
+  }
+}
