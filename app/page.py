@@ -48,9 +48,9 @@ PAGE = """<!doctype html>
     .status-attention { background: #fff0cc; color: #765000; }
     .status-unknown { background: #e9edf0; color: #354c5a; }
     .checklist-fields { min-width: 0; margin: 4px 0; padding: 14px;
-      border: 1px solid #9bb7c7; border-radius: 6px; background: #f5f8fa; }
+      border: 1px solid #9bb7c7; border-radius: 6px; background: #fff2cc; }
     .checklist-edit-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-    .manual-change { background: #fff2cc; padding: 6px; }
+    .manual-change { background: #ffe29a; padding: 6px; }
     .manual-change-label { display: block; font-size: .85rem; margin-top: 6px; }
     #checklist-status:empty { display: none; }
     #review-disclosure > summary { cursor: pointer; }
