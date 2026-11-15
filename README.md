@@ -39,8 +39,8 @@ uv run pytest
 ## Database and test setup
 
 Install Node.js 22 and run `npm ci` for the pinned `npx dbmate` command.
-Copy `.env.example` to `.env` and fill in local settings; the example contains
-setting names only. Set `DBMATE_NO_DUMP_SCHEMA=true` in `.env`.
+Copy `.env.example` to `.env` and fill in local settings. The example leaves
+credentials blank and sets the non-secret default `DBMATE_NO_DUMP_SCHEMA=true`.
 Install PostgreSQL 18 tools (on macOS: `brew install postgresql@18`), then run
 `bash scripts/install-dbmate.sh` to install checksum-verified dbmate 2.38.1 in
 the ignored `.superpowers/bin` directory. Set `DATABASE_URL` to Neon's pooled
