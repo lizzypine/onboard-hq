@@ -32,6 +32,6 @@ extend-select = ["C90"]
 max-complexity = 10
 
 [tool.mypy]
-files = ["app"]
+files = ["app", "db"]
 plugins = ["pydantic.mypy"]
 

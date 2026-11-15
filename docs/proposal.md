@@ -163,6 +163,8 @@ Use Neon PostgreSQL for application persistence, configured through `DATABASE_UR
 
 The first model-connected feature excludes saved records and resets temporary confirmations on refresh. The persistence and manager-review slice retains provider/checklist records, original updates and context, suggestions, and decisions across refreshes and restarts. A forward-only migration and an explicit idempotent synthetic seed establish the initial records; they do not run automatically at app startup.
 
+Keep table-creation migrations in `db/migrations/` and the explicit synthetic seed in `db/seed.py`, runnable with `uv run --env-file .env python -m db.seed`. Seed the established fictional Dentist, provider, templates, and checklist into an empty migrated database; repeating the seed preserves saved progress and existing checklist snapshots. The first reusable query lives in `db/queries.py` as `fetch_provider`, which reads one provider and its own requirements by UUID. Production repositories use this same parameterized query, and `tests/test_queries.py` verifies it against isolated PostgreSQL. Keep setting names without real values in `.env.example`.
+
 ## Searchable Text
 
 Saved administrative notes will provide text that could be searched by meaning. For example, a manager might search for "credentialing delays" or "providers waiting on professional licenses" to find relevant historical updates.

@@ -6,8 +6,8 @@ from app.checklist_models import ChecklistEdit, ChecklistEditRequest
 from app.database import DatabasePool
 from app.models import StoredRequirement
 from app.repository import RecordNotFound, connection
-from app.repository.providers import fetch_provider
 from app.rules.checklist import require_edit, require_same_edit
+from db.queries import fetch_provider
 
 
 class ChecklistRepository:

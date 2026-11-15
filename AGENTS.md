@@ -44,8 +44,9 @@ The canonical project spec is `docs/proposal.md`. `docs/proposal-v2.pdf` contain
 - `app/monitoring_models.py`: derived dashboard contracts, separate from stored provider/context snapshots.
 - `app/monitoring.py`: Hawaii clock boundary and dashboard loading from one saved provider/checklist read.
 - `app/rules/monitoring.py`: pure completion, deadline, and count rules with an explicit as-of date. No clock or I/O.
-- `app/repository/providers.py`: PostgreSQL provider/type reads and atomic template-based checklist initialization with creation retry identities; repository transaction helpers are in `app/repository/__init__.py`.
-- `app/seed.py`: explicit, repeatable synthetic development seed. Never run at application startup.
+- `app/repository/providers.py`: PostgreSQL provider/type reads and atomic template-based checklist initialization with creation retry identities; the provider snapshot SELECT is in `db/queries.py`. Repository transaction helpers are in `app/repository/__init__.py`.
+- `db/queries.py`: one parameterized `fetch_provider` query returning a typed provider and its own checklist; used by production repositories and tested directly in `tests/test_queries.py`.
+- `db/seed.py`: explicit, repeatable synthetic development seed; run with `python -m db.seed`. Never run at application startup. `app/seed.py` preserves the earlier CLI/imports for compatibility.
 - `app/repository/updates.py`: request claims, captured provider context, and saved suggestions/history.
 - `app/repository/reviews.py`: locked, atomic checklist changes and terminal review decisions.
 - `app/rules/review.py`: pure role, date-confirmation, and stale-version review rules.
