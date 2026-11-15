@@ -159,6 +159,8 @@ The database will persist the following linked records:
 
 Each provider can have multiple requirements and updates, and each update can generate multiple suggestions. All records will remain available after restarting the application.
 
+Every foreign key must explicitly state its deletion behavior. Use ON DELETE RESTRICT for referenced shared provider types and requirement templates. Deleting a provider uses ON DELETE CASCADE to remove that provider’s requirements, updates, suggestions, review decisions, and manual checklist edit history, while preserving shared catalog rows and other providers’ records. Manual checklist history remains immutable while its provider exists; cascading provider deletion is the exception. Any application operation that exposes permanent provider deletion must enforce Manager mode and require confirmation naming the provider and warning that deletion cannot be undone.
+
 Use Neon PostgreSQL for application persistence, configured through `DATABASE_URL` in the environment. Manage the schema with dbmate SQL migrations. The initial Onboard HQ database is empty; the migrations will establish its tables. Keep credentials in the ignored `.env` file and commit only placeholders in `.env.example`. Automated database tests will use a separate PostgreSQL test database.
 
 The first model-connected feature excludes saved records and resets temporary confirmations on refresh. The persistence and manager-review slice retains provider/checklist records, original updates and context, suggestions, and decisions across refreshes and restarts. A forward-only migration and an explicit idempotent synthetic seed establish the initial records; they do not run automatically at app startup.
@@ -173,7 +175,7 @@ Semantic search and retrieval-augmented generation (RAG) are outside the first m
 
 ## Human Review
 
-Users will see the original update alongside proposed changes and supporting text. Managers can approve, correct, or reject each suggestion, or explicitly save edits to an existing checklist row. Only approved suggestions and explicit Manager saves update checklist values. Original messages, review decisions, and manual edit evidence will be retained.
+Users will see the original update alongside proposed changes and supporting text. Managers can approve, correct, or reject each suggestion, or explicitly save edits to an existing checklist row. Only approved suggestions and explicit Manager saves update checklist values. Original messages, review decisions, and manual edit evidence will be retained unless their provider is permanently deleted under the Saved Records deletion policy.
 
 Anyone can propose an update. Only a manager can add a fictional provider, approve suggestions, or directly save checklist changes. Creating a provider initializes Outstanding requirements without a model call. For the prototype, a clearly labeled simulated Proposer/Manager role switch will represent those roles; enforce it on creation, review, and manual save operations. Actual sign-in and authenticated role enforcement are outside this slice.
 
