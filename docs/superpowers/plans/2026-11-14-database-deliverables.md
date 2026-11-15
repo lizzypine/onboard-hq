@@ -8,7 +8,7 @@
 
 **Tech Stack:** Existing Python/FastAPI/Pydantic/Psycopg/PostgreSQL/pytest/Playwright; dbmate 2.38.1 as a development npm tool. No schema or UI change.
 
-**Spec:** User's exact acceptance list, plus canonical `docs/proposal.md` Data Model and Persistence/Testing Strategy. Existing migrations already create all eight application tables.
+**Spec:** User's exact acceptance list, plus canonical `docs/proposal.md` Saved Records/Testing Strategy. Existing migrations already create all eight application tables.
 
 ## Global Constraints
 

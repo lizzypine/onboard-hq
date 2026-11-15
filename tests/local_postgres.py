@@ -3,6 +3,7 @@
 import atexit
 import os
 import shutil
+import signal
 import socket
 import subprocess
 import tempfile
@@ -18,6 +19,12 @@ class LocalCluster:
 
 
 _cluster: LocalCluster | None = None
+_previous_sigterm = None
+
+
+def interrupt_for_termination(_signum, _frame) -> None:
+    # Let pytest unwind session fixtures; standalone callers also run atexit.
+    raise KeyboardInterrupt("Test process terminated")
 
 
 def postgres_binaries() -> Path:
@@ -56,7 +63,7 @@ def run_tool(cluster: LocalCluster, tool: str, *arguments: str) -> None:
 
 
 def stop_local_database() -> None:
-    global _cluster
+    global _cluster, _previous_sigterm
     if _cluster is None:
         return
     cluster = _cluster
@@ -67,10 +74,13 @@ def stop_local_database() -> None:
     if os.environ.get("TEST_DATABASE_URL") == cluster.url:
         del os.environ["TEST_DATABASE_URL"]
     _cluster = None
+    if _previous_sigterm is not None:
+        signal.signal(signal.SIGTERM, _previous_sigterm)
+        _previous_sigterm = None
 
 
 def local_database_url() -> str:
-    global _cluster
+    global _cluster, _previous_sigterm
     if _cluster is not None:
         return _cluster.url
     binaries = postgres_binaries()
@@ -84,6 +94,7 @@ def local_database_url() -> str:
     _cluster = LocalCluster(directory, binaries, url)
     data = str(directory / "data")
     try:
+        _previous_sigterm = signal.signal(signal.SIGTERM, interrupt_for_termination)
         run_tool(
             _cluster,
             "initdb",
