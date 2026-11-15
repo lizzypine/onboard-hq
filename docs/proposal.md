@@ -159,9 +159,13 @@ The database will persist the following linked records:
 
 Each provider can have multiple requirements and updates, and each update can generate multiple suggestions. All records will remain available after restarting the application.
 
+Every foreign key must explicitly state its deletion behavior. Use ON DELETE RESTRICT for referenced shared provider types and requirement templates. Deleting a provider uses ON DELETE CASCADE to remove that provider’s requirements, updates, suggestions, review decisions, and manual checklist edit history, while preserving shared catalog rows and other providers’ records. Manual checklist history remains immutable while its provider exists; cascading provider deletion is the exception. Any application operation that exposes permanent provider deletion must enforce Manager mode and require confirmation naming the provider and warning that deletion cannot be undone.
+
 Use Neon PostgreSQL for application persistence, configured through `DATABASE_URL` in the environment. Manage the schema with dbmate SQL migrations. The initial Onboard HQ database is empty; the migrations will establish its tables. Keep credentials in the ignored `.env` file and commit only placeholders in `.env.example`. Automated database tests will use a separate PostgreSQL test database.
 
 The first model-connected feature excludes saved records and resets temporary confirmations on refresh. The persistence and manager-review slice retains provider/checklist records, original updates and context, suggestions, and decisions across refreshes and restarts. A forward-only migration and an explicit idempotent synthetic seed establish the initial records; they do not run automatically at app startup.
+
+Keep table-creation migrations in `db/migrations/` and the explicit synthetic seed in `db/seed.py`, runnable with `uv run --env-file .env python -m db.seed`. Seed the established fictional Dentist, provider, templates, and checklist into an empty migrated database; repeating the seed preserves saved progress and existing checklist snapshots. The first reusable query lives in `db/queries.py` as `fetch_provider`, which reads one provider and its own requirements by UUID. Production repositories use this same parameterized query, and `tests/test_queries.py` verifies it against isolated PostgreSQL. Keep credentials blank in `.env.example` and include the non-secret default `DBMATE_NO_DUMP_SCHEMA=true` to disable automatic schema dumping.
 
 ## Searchable Text
 
@@ -171,7 +175,7 @@ Semantic search and retrieval-augmented generation (RAG) are outside the first m
 
 ## Human Review
 
-Users will see the original update alongside proposed changes and supporting text. Managers can approve, correct, or reject each suggestion, or explicitly save edits to an existing checklist row. Only approved suggestions and explicit Manager saves update checklist values. Original messages, review decisions, and manual edit evidence will be retained.
+Users will see the original update alongside proposed changes and supporting text. Managers can approve, correct, or reject each suggestion, or explicitly save edits to an existing checklist row. Only approved suggestions and explicit Manager saves update checklist values. Original messages, review decisions, and manual edit evidence will be retained unless their provider is permanently deleted under the Saved Records deletion policy.
 
 Anyone can propose an update. Only a manager can add a fictional provider, approve suggestions, or directly save checklist changes. Creating a provider initializes Outstanding requirements without a model call. For the prototype, a clearly labeled simulated Proposer/Manager role switch will represent those roles; enforce it on creation, review, and manual save operations. Actual sign-in and authenticated role enforcement are outside this slice.
 
@@ -215,7 +219,7 @@ The persistence and manager-review slice requires automated unit, integration, a
 - **Integration tests:** FastAPI operations with a separate PostgreSQL test database, including dbmate migrations, repository persistence, atomic approvals, rejection history, duplicate/stale decisions, and errors. Use deterministic model output rather than live model calls.
 - **End-to-end tests:** A real browser against the running app and isolated PostgreSQL, with `TestModel` substituted at the model boundary. Exercise proposing, switching simulated roles, manager approval/correction/rejection, and persistent checklist/history after refresh and application restart.
 
-Run all three layers in local verification and CI. No automated test calls a real local or cloud model, or writes to the Neon application database. Keep Ruff, mypy, and the complete pytest suite as required checks.
+Run all three layers in local verification and CI. The local `uv run pytest` command lazily creates and cleans up a disposable loopback PostgreSQL 18 cluster when no explicit `TEST_DATABASE_URL` is supplied; focused pure tests do not start a database. An explicitly supplied test URL must pass the existing isolation guard and is never replaced with a fallback. CI uses its separate PostgreSQL service and also checks the owned-cluster lifecycle. Pin the dbmate development tool for `npx dbmate status`; verify migrations report no pending changes and load the synthetic seed explicitly. No automated test calls a real local or cloud model, or writes to the Neon application database. Keep Ruff, mypy, and the complete pytest suite as required checks.
 
 Direct checklist editing tests cover Manager enforcement, type-specific dropdowns, unfamiliar values, explicit/cleared/invalid dates, immutable audit history, atomic rollback, ownership, concurrent edits and approvals, stale versions, idempotent/conflicting retries after later progress, failed responses/reloads, deadline-only monitoring, and restart/provider isolation. Browser tests also cover disclosure defaults/preservation, pending counts, heading/button placement, stripes/colors, keyboard use, and narrow layouts.
 

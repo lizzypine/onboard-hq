@@ -15,3 +15,6 @@ wheels/
 # Visual companion and plan-execution runtime files
 .superpowers/
 test-results/
+
+# Local npm development tools
+node_modules/

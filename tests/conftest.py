@@ -1,6 +1,7 @@
 """Shared synthetic inputs and a suite-wide real-model request guard."""
 
 import asyncio
+import os
 from collections.abc import Iterator
 
 import psycopg
@@ -15,7 +16,18 @@ from app.database import create_pool
 from app.models import StoredProvider
 from app.repository.providers import ProviderRepository
 from app.seed import KEKOA_ID, seed_synthetic
-from tests.database import configured_test_url, migrate_test_database
+from tests.database import ROOT, configured_test_url, migrate_test_database
+from tests.local_postgres import stop_local_database
+
+os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(ROOT / ".superpowers/browsers"))
+
+
+@pytest.fixture(scope="session", autouse=True)
+def local_database_lifecycle():
+    try:
+        yield
+    finally:
+        stop_local_database()
 
 
 @pytest.fixture

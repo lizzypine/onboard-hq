@@ -16,7 +16,7 @@ from app.models import (
     UpdateClaim,
 )
 from app.repository import RecordNotFound, connection
-from app.repository.providers import fetch_provider
+from db.queries import fetch_provider
 
 READ_UPDATE = """
 SELECT u.*, COALESCE((

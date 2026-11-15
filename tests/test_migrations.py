@@ -130,7 +130,11 @@ def test_suggestion_has_only_one_terminal_decision(connection, links):
 def test_rollback_and_reapply_on_separate_disposable_database():
     with disposable_database() as url:
         migrate_test_database(url)
-        for remaining in ("providers", None):
+        for remaining, edits in (
+            ("providers", "checklist_edits"),
+            ("providers", None),
+            (None, None),
+        ):
             result = subprocess.run(
                 [str(ROOT / ".superpowers/bin/dbmate"), "--no-dump-schema", "rollback"],
                 cwd=ROOT,
@@ -148,7 +152,7 @@ def test_rollback_and_reapply_on_separate_disposable_database():
                 ).fetchone() == (remaining,)
                 assert conn.execute(
                     "SELECT to_regclass('public.checklist_edits')"
-                ).fetchone() == (None,)
+                ).fetchone() == (edits,)
         migrate_test_database(url)
         with psycopg.connect(url) as conn:
             assert conn.execute("SELECT count(*) FROM providers").fetchone() == (0,)
