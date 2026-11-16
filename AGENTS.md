@@ -2,7 +2,7 @@
 
 This project is a web app that helps community health center staff manage onboarding for new healthcare providers. It brings requirements, statuses, deadlines, and proposed start dates into one place so staff can quickly see outstanding tasks. An LLM turns free-text updates into suggested changes, which users review and approve before saving.
 
-The canonical project spec is `docs/proposal.md`. `docs/proposal-v2.pdf` contains the revised proposal and Ethan's feedback; distinguish changes incorporated into the proposal from suggestions still under consideration.
+The project proposal is `docs/proposal.md`; keep that file unchanged. Record subsequent database design decisions in `docs/database-design.md`, distinguishing its proposed target from the implemented `db/schema.sql`. `docs/proposal-v2.pdf` contains the revised proposal and Ethan's feedback; distinguish changes incorporated into the proposal from suggestions still under consideration.
 
 ## Product constraints and proposal feedback
 
@@ -83,6 +83,6 @@ bash scripts/test.sh uv run pytest # full suite with disposable local PostgreSQL
 
 ## Spec
 
-- `docs/proposal.md` is the spec. When a decision is made in a conversation (a feature added or left out, a limit or value chosen, an open question answered), edit the section the decision belongs to so that it states the decision, in the same change, and name that section in the pull request Summary. Change only what the decision affects. Do not add a dated log, approval history, or status notes; git and `docs/superpowers/` keep the history.
-- When a revised proposal incorporates a change, synchronize the affected section of `docs/proposal.md` in the same change as the agent guidance. Feedback phrased as an option or suggestion does not by itself settle an open question.
-- A design under `docs/superpowers/specs/` covers one change; `docs/proposal.md` covers the whole project. If the two disagree, ask before building.
+- Keep `docs/proposal.md` unchanged. Record database decisions in the relevant section of `docs/database-design.md` and name that section in the pull request Summary. For other scope changes, use a separate scoped design document rather than rewriting the proposal. Change only what the decision affects. Do not add a dated log, approval history, or progress notes; git keeps the history. A documented target design does not authorize implementation.
+- When the user provides a revised proposal, synchronize affected agent guidance and the database design as appropriate without editing `docs/proposal.md`. Feedback phrased as an option or suggestion does not by itself settle an open question.
+- `docs/proposal.md` describes the original project; `docs/database-design.md` records subsequent database decisions and target-schema changes. A design under `docs/superpowers/specs/` covers one change. If their requirements conflict beyond the explicitly recorded database decisions, ask before building.
