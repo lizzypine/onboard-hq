@@ -1,7 +1,6 @@
 """Saved analysis/review workflow; model work never holds a database transaction."""
 
 from collections.abc import Callable
-from uuid import UUID
 
 from pydantic import ValidationError
 from pydantic_ai import Agent
@@ -57,7 +56,7 @@ async def submit_update(
 
 async def review_suggestion(
     repository: ReviewRepository,
-    suggestion_id: UUID,
+    suggestion_id: int,
     request: ReviewRequest,
     role: DemoRole,
 ) -> ReviewDecision:

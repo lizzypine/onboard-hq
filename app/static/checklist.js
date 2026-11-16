@@ -2,7 +2,7 @@
 
 import {statusBadge, statusSelect} from "./statuses.js";
 
-const pendingKey = "onboard-hq:pending-checklist-edit";
+const pendingKey = "onboard-hq:pending-checklist-edit:v2";
 
 function text(parent, tag, value, className = "") {
   const node = document.createElement(tag);
@@ -16,7 +16,7 @@ function restoreAttempt() {
   try {
     const value = JSON.parse(sessionStorage.getItem(pendingKey));
     const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (value && uuid.test(value.providerId) && uuid.test(value.requirementId) && uuid.test(value.body?.id)
+    if (value && Number.isSafeInteger(value.providerId) && value.providerId > 0 && Number.isSafeInteger(value.requirementId) && value.requirementId > 0 && uuid.test(value.body?.operation_id)
         && typeof value.providerName === "string" && typeof value.body.status === "string"
         && Number.isInteger(value.body.expected_version) && value.body.expected_version >= 0
         && [value.body.scheduled_date, value.body.deadline].every(d => d === null || typeof d === "string")) return value;
@@ -117,7 +117,7 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved}) {
     save.addEventListener("click", () => {
       if (save.disabled || busy || pending) return;
       pending = {providerId: provider.id, providerName: provider.name, requirementId: requirement.id, confirmed: false,
-        body: {id: crypto.randomUUID(), expected_version: requirement.version, ...draft}};
+        body: {operation_id: crypto.randomUUID(), expected_version: requirement.version, ...draft}};
       remember();
       sendAttempt();
     });
@@ -142,7 +142,7 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved}) {
     const preservedSync = syncDraft;
     body.replaceChildren();
     syncDraft = null;
-    document.getElementById("checklist-action-heading").hidden = roleSelect.value !== "manager";
+    document.getElementById("checklist-action-heading").hidden = roleSelect.value !== "manager" || Boolean(provider?.archived_at);
     if (!provider) { showNotice(); return; }
     const indicators = new Map(monitoring.requirements.map(row => [row.requirement_id, row]));
     const catalog = new Map(options.map(row => [row.requirement_id, row]));
@@ -159,7 +159,7 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved}) {
       const label = text(row, "td", monitoringLabel(indicator), "indicator " + (indicator.completion === "outstanding" && indicator.deadline_state === "past" ? "overdue" : indicator.completion));
       label.dataset.monitoring = "";
       const action = text(row, "td", "");
-      action.hidden = roleSelect.value !== "manager";
+      action.hidden = roleSelect.value !== "manager" || Boolean(provider.archived_at);
       if (!action.hidden) {
         const edit = text(action, "button", "Edit", "checklist-edit-button");
         edit.type = "button";

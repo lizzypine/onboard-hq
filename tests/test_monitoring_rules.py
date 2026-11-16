@@ -24,15 +24,20 @@ def provider_with(
     scheduled_date=None,
     proposed_start_date=None,
 ):
-    provider_id = uuid4()
+    provider_id = 1
     return StoredProvider(
         id=provider_id,
+        creation_request_id=uuid4(),
+        checklist_template_id=3,
+        template_version=1,
         name="Dr. Kekoa Ejemplo",
         provider_type=provider_type,
         proposed_start_date=proposed_start_date,
         requirements=[
             StoredRequirement(
-                id=uuid4(),
+                id=2,
+                checklist_template_id=3,
+                requirement_definition_id=4,
                 provider_id=provider_id,
                 name=name,
                 status=status,
@@ -140,17 +145,17 @@ def test_negated_and_qualified_statuses_need_review(name, status):
 
 
 @pytest.mark.parametrize(
-    "provider_type,name,status",
+    "provider_type,name,status,expected",
     [
-        ("Synthetic other type", "Drug screening", "Completed"),
-        ("dentist", "Drug screening", "Completed"),
-        ("Dentist", "Synthetic requirement", "Signed"),
-        ("Dentist", "drug screening", "Completed"),
-        ("Dentist", "Offer letter", "Completed"),
+        ("Synthetic other type", "Drug screening", "Completed", "needs_review"),
+        ("dentist", "Drug screening", "Completed", "finished"),
+        ("Dentist", "Synthetic requirement", "Signed", "needs_review"),
+        ("Dentist", "drug screening", "Completed", "finished"),
+        ("Dentist", "Offer letter", "Completed", "needs_review"),
     ],
 )
-def test_type_and_requirement_boundaries(provider_type, name, status):
-    assert classify_completion(provider_type, name, status) == "needs_review"
+def test_type_and_requirement_boundaries(provider_type, name, status, expected):
+    assert classify_completion(provider_type, name, status) == expected
 
 
 @pytest.mark.parametrize(
@@ -226,11 +231,11 @@ def test_counts_partition_remaining_and_preserve_row_order():
     provider.requirements.extend(
         [
             requirement.model_copy(
-                update={"id": uuid4(), "name": "Drug screening", "status": "Scheduled"}
+                update={"id": 8, "name": "Drug screening", "status": "Scheduled"}
             ),
             requirement.model_copy(
                 update={
-                    "id": uuid4(),
+                    "id": 9,
                     "name": "Insurance credentialing",
                     "status": "Results being checked",
                 }

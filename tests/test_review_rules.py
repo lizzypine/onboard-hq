@@ -11,8 +11,10 @@ def records(inferred=False, version=2, proposed_date=date(2026, 10, 22)):
     from app.models import SavedSuggestion, StoredRequirement
 
     requirement = StoredRequirement(
-        id=uuid4(),
-        provider_id=uuid4(),
+        id=2,
+        provider_id=1,
+        checklist_template_id=3,
+        requirement_definition_id=4,
         name="Drug screening",
         status="Outstanding",
         scheduled_date=date(2026, 10, 20),
@@ -20,7 +22,7 @@ def records(inferred=False, version=2, proposed_date=date(2026, 10, 22)):
         version=version,
     )
     suggestion = SavedSuggestion(
-        id=uuid4(),
+        id=5,
         requirement_id=requirement.id,
         requirement_version=2,
         requirement="Drug screening",

@@ -1,7 +1,6 @@
 """Real browser creation, provider isolation, and recovery with TestModel only."""
 
 from urllib.parse import urlsplit
-from uuid import uuid4
 
 import psycopg
 import pytest
@@ -9,6 +8,7 @@ from playwright.sync_api import expect
 
 from tests.database import configured_test_url
 from tests.e2e.test_review_workflow import open_history
+from tests.fixtures.current_database import configure_catalog, provider_type_id
 
 
 def providers(page, app_server):
@@ -42,7 +42,7 @@ def save_form(page, app_server, form):
         form.get_by_role("button", name="Add provider", exact=True).click()
     assert response.value.status == 201
     created = response.value.json()
-    expect(page.get_by_label("Provider", exact=True)).to_have_value(created["id"])
+    expect(page.get_by_label("Provider", exact=True)).to_have_value(str(created["id"]))
     expect(form).to_be_hidden()
     return created
 
@@ -93,7 +93,7 @@ def test_manager_adds_and_selects_an_independent_provider(
             "Finished", exact=True
         )
     ).to_have_text("2")
-    page.get_by_label("Provider", exact=True).select_option(created["id"])
+    page.get_by_label("Provider", exact=True).select_option(str(created["id"]))
     assert_new_counts(page)
 
 
@@ -121,16 +121,8 @@ def test_invalid_form_cancel_and_role_switch_do_not_create_records(page, app_ser
 
 
 def test_configured_type_preview_and_names_are_safe(page, app_server):
-    type_id, template_id = uuid4(), uuid4()
     requirement = '<img src=x onerror="window.providerInjected=true">'
-    with psycopg.connect(configured_test_url()) as conn:
-        conn.execute(
-            "INSERT INTO provider_types VALUES (%s,'Synthetic Other')", (type_id,)
-        )
-        conn.execute(
-            "INSERT INTO requirement_templates VALUES (%s,%s,%s)",
-            (template_id, type_id, requirement),
-        )
+    type_id = configure_catalog("Synthetic Other", [requirement]).id
     form = open_form(page, app_server)
     form.get_by_label("Provider type", exact=True).select_option(str(type_id))
     expect(
@@ -166,7 +158,7 @@ def test_duplicate_names_remain_distinct_selectable_records(
             "Finished", exact=True
         )
     ).to_have_text("2")
-    page.get_by_label("Provider", exact=True).select_option(created["id"])
+    page.get_by_label("Provider", exact=True).select_option(str(created["id"]))
     assert_new_counts(page)
 
 
@@ -188,8 +180,10 @@ def test_missing_templates_disable_creation_without_fabricated_preview(
     page, app_server
 ):
     with psycopg.connect(configured_test_url()) as conn:
-        conn.execute("UPDATE requirements SET source_template_id=NULL")
-        conn.execute("DELETE FROM requirement_templates")
+        conn.execute(
+            "INSERT INTO checklist_templates(provider_type_id,template_version) VALUES (%s,2)",
+            (provider_type_id(),),
+        )
     form = open_form(page, app_server)
     expect(page.locator("#provider-creation-status")).to_contain_text(
         "No configured requirements"
@@ -232,7 +226,7 @@ def test_lost_creation_response_reuses_identity(page, app_server, change_name):
         form.get_by_role("button", name="Add provider", exact=True).click()
         expect(form).to_be_hidden()
         expect(page.get_by_label("Provider", exact=True)).to_have_value(
-            captured[0]["id"]
+            str(captured[0]["id"])
         )
         assert_new_counts(page)
     assert len(providers(page, app_server)) == 2
@@ -279,7 +273,7 @@ def test_saved_creation_failed_refresh_recovers_new_selection(
     ).to_be_disabled()
     page.unroute("**/providers**", intercept)
     page.get_by_role("button", name="Refresh data", exact=True).click()
-    expect(page.get_by_label("Provider", exact=True)).to_have_value(saved_ids[0])
+    expect(page.get_by_label("Provider", exact=True)).to_have_value(str(saved_ids[0]))
     expect(form).to_be_hidden()
     assert_new_counts(page)
     assert len(providers(page, app_server)) == 2
@@ -296,7 +290,7 @@ def test_new_provider_analysis_and_review_stay_scoped_after_restart(
     created = save_form(page, app_server, form)
     app_server.restart("inferred")
     page.reload()
-    page.get_by_label("Provider", exact=True).select_option(created["id"])
+    page.get_by_label("Provider", exact=True).select_option(str(created["id"]))
     assert_new_counts(page)
     page.get_by_label("Original update", exact=True).fill("Drug screening on the 18th.")
     page.get_by_role("button", name="Analyze update", exact=True).click()
@@ -327,7 +321,7 @@ def test_new_provider_analysis_and_review_stay_scoped_after_restart(
     )
     app_server.restart()
     page.reload()
-    page.get_by_label("Provider", exact=True).select_option(created["id"])
+    page.get_by_label("Provider", exact=True).select_option(str(created["id"]))
     expect(page.locator("#requirements")).to_contain_text("2026-12-18")
 
 

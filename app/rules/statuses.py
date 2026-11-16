@@ -25,23 +25,33 @@ _DENTIST_STATUSES = {
 }
 
 
+def known_statuses(provider_type: str, requirement_name: str) -> tuple[str, ...] | None:
+    if provider_type.strip(" ").lower() != "dentist":
+        return None
+    normalized = requirement_name.strip(" ").lower()
+    return next(
+        (
+            choices
+            for name, choices in _DENTIST_STATUSES.items()
+            if name.lower() == normalized
+        ),
+        None,
+    )
+
+
 def status_choices(
     provider_type: str, requirement_name: str, *preserved: str
 ) -> list[str]:
-    choices = (
-        _DENTIST_STATUSES.get(requirement_name, ("Outstanding",))
-        if provider_type == "Dentist"
-        else ("Outstanding",)
-    )
+    choices = known_statuses(provider_type, requirement_name) or ("Outstanding",)
     return list(dict.fromkeys([*choices, *preserved]))
 
 
 def classify_completion(
     provider_type: str, requirement_name: str, status: str
 ) -> Completion:
-    if provider_type != "Dentist" or requirement_name not in _DENTIST_STATUSES:
+    choices = known_statuses(provider_type, requirement_name)
+    if choices is None:
         return "needs_review"
-    choices = _DENTIST_STATUSES[requirement_name]
     normalized = status.strip().casefold()
     if normalized == choices[-1].casefold():
         return "finished"

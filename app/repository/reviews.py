@@ -1,12 +1,12 @@
 """Atomic application of one terminal manager decision."""
 
-from uuid import UUID, uuid4
-
 from app.database import DatabasePool
 from app.models import ReviewDecision, ReviewRequest, StoredRequirement
-from app.repository import RecordNotFound, connection
+from app.repository import RecordNotFound, connection, lock_provider
 from app.repository.updates import fetch_update
+from app.rules.provider_state import require_active
 from app.rules.review import ReviewConflict, resolve_review
+from db.queries import fetch_provider
 
 
 class ReviewRepository:
@@ -14,9 +14,18 @@ class ReviewRepository:
         self.pool = pool
 
     async def decide(
-        self, suggestion_id: UUID, request: ReviewRequest
+        self, suggestion_id: int, request: ReviewRequest
     ) -> ReviewDecision:
         async with connection(self.pool) as conn:
+            owner = await (
+                await conn.execute(
+                    "SELECT provider_id FROM suggestions WHERE id=%s", (suggestion_id,)
+                )
+            ).fetchone()
+            if owner is None:
+                raise RecordNotFound("Suggestion not found.")
+            await lock_provider(conn, owner["provider_id"])
+            require_active(await fetch_provider(conn, owner["provider_id"]))
             row = await (
                 await conn.execute(
                     "SELECT id,update_id,requirement_id FROM suggestions WHERE id=%s FOR UPDATE",
@@ -31,7 +40,7 @@ class ReviewRepository:
             suggestion = next(s for s in update.suggestions if s.id == suggestion_id)
             current = await (
                 await conn.execute(
-                    "SELECT * FROM requirements WHERE id=%s FOR UPDATE",
+                    "SELECT r.*,d.name FROM requirements r JOIN requirement_definitions d ON d.id=r.requirement_definition_id WHERE r.id=%s FOR UPDATE OF r",
                     (row["requirement_id"],),
                 )
             ).fetchone()
@@ -48,9 +57,8 @@ class ReviewRepository:
                 )
             decision = await (
                 await conn.execute(
-                    "INSERT INTO review_decisions(id,suggestion_id,outcome,previous_status,previous_scheduled_date,applied_status,applied_scheduled_date,reviewer_role) VALUES (%s,%s,%s,%s,%s,%s,%s,'manager') RETURNING *",
+                    "INSERT INTO review_decisions(suggestion_id,outcome,previous_status,previous_scheduled_date,applied_status,applied_scheduled_date,reviewer_role) VALUES (%s,%s,%s,%s,%s,%s,'manager') RETURNING *",
                     (
-                        uuid4(),
                         suggestion_id,
                         change.outcome,
                         requirement.status,

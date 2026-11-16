@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 import psycopg
@@ -12,17 +13,17 @@ from tests.database import (
     ROOT,
     configured_test_url,
     disposable_database,
-    migrate_test_database,
 )
+from tests.fixtures.legacy_database import migrate_legacy as migrate_test_database
 
 
 @pytest.fixture
 def connection():
-    url = configured_test_url()
-    migrate_test_database(url)
-    with psycopg.connect(url) as conn:
-        yield conn
-        conn.rollback()
+    with disposable_database() as url:
+        migrate_test_database(url)
+        with psycopg.connect(url) as conn:
+            yield conn
+            conn.rollback()
 
 
 def test_migrations_create_eight_application_tables(connection):
@@ -48,7 +49,11 @@ def test_second_migrate_preserves_application_records(connection):
     key = uuid4()
     connection.execute("INSERT INTO provider_types VALUES (%s, %s)", (key, str(key)))
     connection.commit()
-    migrate_test_database(configured_test_url())
+    migrate_test_database(
+        urlsplit(configured_test_url())
+        ._replace(path="/" + connection.info.dbname)
+        .geturl()
+    )
     assert connection.execute(
         "SELECT count(*) FROM provider_types WHERE id=%s", (key,)
     ).fetchone() == (1,)

@@ -1,8 +1,8 @@
 "use strict";
 
-import {renderReviewControls} from "./review.js";
-import {providerLabel, setupProviderCreation} from "./providers.js";
-import {setupChecklist} from "./checklist.js";
+import {renderReviewControls} from "./review.js?v=2";
+import {providerLabel, setupProviderCreation} from "./providers.js?v=2";
+import {setupChecklist} from "./checklist.js?v=2";
 
 const providerSelect = document.getElementById("provider");
 const roleSelect = document.getElementById("demo-role");
@@ -43,7 +43,7 @@ function setBusy(value) {
   providerSelect.disabled = value || !state.provider;
   roleSelect.disabled = value;
   refreshButton.disabled = value;
-  submitButton.disabled = value || !state.provider;
+  submitButton.disabled = value || !state.provider || Boolean(state.provider.archived_at);
   document.querySelectorAll(".review-fields").forEach(element => { element.disabled = value; });
   creation?.setBusy(value);
   checklist?.setBusy(value);
@@ -61,7 +61,7 @@ function renderMonitoring() {
 
 function renderChecklist() {
   document.getElementById("provider-description").textContent =
-    state.provider ? state.provider.provider_type + " · Proposed start: " + (state.provider.proposed_start_date || "Not set") : "";
+    state.provider ? state.provider.provider_type + " · Proposed start: " + (state.provider.proposed_start_date || "Not set") + (state.provider.archived_at ? " · Archived — viewing only" : "") : "";
   renderMonitoring();
   document.getElementById("empty-checklist").hidden = !state.provider || state.provider.requirements.length > 0;
   checklist?.render(state.provider, state.monitoring, state.checklistOptions);
@@ -74,7 +74,7 @@ function option(select, value, label) {
 }
 
 async function decide(suggestion, body) {
-  if (state.busy) return;
+  if (state.busy || state.provider?.archived_at) return;
   setBusy(true);
   let saved = false;
   try {
@@ -116,7 +116,7 @@ function renderSuggestion(parent, suggestion, completed) {
     text(card, "p", "Reviewed: " + new Date(decision.reviewed_at).toLocaleString());
   } else if (canReview) {
     renderReviewControls(card, suggestion, state.provider.requirements.find(r => r.id === suggestion.requirement_id),
-      {busy: state.busy, onDecide: decide,
+      {busy: state.busy || Boolean(state.provider.archived_at), onDecide: decide,
         statusChoices: state.checklistOptions.find(r => r.requirement_id === suggestion.requirement_id)?.statuses || []});
   } else text(card, "p", completed ? "Awaiting manager review." : "Analysis is unfinished; this cannot be reviewed.");
 }
@@ -127,7 +127,7 @@ function renderHistory() {
   document.getElementById("pending-suggestions").textContent = pending + " pending suggestion" + (pending === 1 ? "" : "s") + (state.edits.length ? " · " + state.edits.length + " checklist edit" + (state.edits.length === 1 ? "" : "s") : "");
   if (!state.history.length && !state.edits.length) text(results, "p", "No saved updates yet.");
   const entries = [...state.history.map(record => ({kind: "update", record})), ...state.edits.map(record => ({kind: "edit", record}))]
-    .sort((a, b) => Date.parse(b.record.created_at) - Date.parse(a.record.created_at) || b.record.id.localeCompare(a.record.id));
+    .sort((a, b) => Date.parse(b.record.created_at) - Date.parse(a.record.created_at) || b.kind.localeCompare(a.kind) || b.record.id - a.record.id);
   for (const entry of entries) {
     if (entry.kind === "edit") { renderManualEdit(entry.record); continue; }
     const update = entry.record;
@@ -189,10 +189,10 @@ async function initialize(preferredId = state.preferredProviderId) {
   setBusy(true);
   clearSnapshot();
   try {
-    const providers = await api("/providers");
+    const providers = await api("/providers?state=" + document.getElementById("provider-state").value);
     providerSelect.replaceChildren();
     providers.forEach(provider => option(providerSelect, provider.id, providerLabel(provider, providers)));
-    if (providers.some(provider => provider.id === selected)) providerSelect.value = selected;
+    if (providers.some(provider => String(provider.id) === String(selected))) providerSelect.value = selected;
     if (!providers.length) {
       status.textContent = "No providers yet. A manager can add a fictional provider when templates are configured.";
       return false;
@@ -211,7 +211,7 @@ async function initialize(preferredId = state.preferredProviderId) {
 
 document.getElementById("update-form").addEventListener("submit", async event => {
   event.preventDefault();
-  if (state.busy || !state.provider) return;
+  if (state.busy || !state.provider || state.provider.archived_at) return;
   const bodyText = updateText.value;
   const key = JSON.stringify([state.provider.id, bodyText]);
   if (!state.pending || state.pending.key !== key) state.pending = {key, id: crypto.randomUUID()};
@@ -253,3 +253,5 @@ providerSelect.addEventListener("change", () => {
 });
 refreshButton.addEventListener("click", () => initialize());
 initialize();
+
+document.getElementById("provider-state").addEventListener("change", () => initialize());

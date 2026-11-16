@@ -4,7 +4,6 @@ import asyncio
 import importlib
 from uuid import uuid4
 
-import psycopg
 import pytest
 from fastapi.testclient import TestClient
 from pydantic_ai.exceptions import (
@@ -17,31 +16,44 @@ from pydantic_ai.models.test import TestModel
 
 from app import main
 from app.agent import AnalyzeUpdateRequest, build_agent
-from app.seed import KEKOA_ID
+from app.database import create_pool
+from app.models import Requirement
+from app.provider_models import CreateProviderRequest
+from app.repository.catalog import CatalogRepository
+from app.repository.providers import ProviderRepository
 from tests.database import configured_test_url
 
 
 def _post_update(client, request):
     """Prepare stored context for historical extraction cases, then use the real new API."""
-    with psycopg.connect(configured_test_url()) as conn:
-        conn.execute(
-            "UPDATE providers SET proposed_start_date=%s WHERE id=%s",
-            (request.provider.proposed_start_date, KEKOA_ID),
-        )
-        names = [r.name for r in request.provider.requirements]
-        conn.execute(
-            "DELETE FROM requirements WHERE provider_id=%s AND NOT(name=ANY(%s))",
-            (KEKOA_ID, names),
-        )
-        for requirement in request.provider.requirements:
-            conn.execute(
-                "UPDATE requirements SET status=%s,deadline=%s WHERE provider_id=%s AND name=%s",
-                (requirement.status, requirement.deadline, KEKOA_ID, requirement.name),
+
+    async def prepare():
+        async with create_pool(configured_test_url()) as pool:
+            template = await CatalogRepository(pool).ensure_version(
+                request.provider.provider_type,
+                [r.name for r in request.provider.requirements],
+                template_version=2,
             )
+            return await ProviderRepository(pool).initialize_provider(
+                CreateProviderRequest(
+                    creation_request_id=uuid4(),
+                    name=request.provider.name,
+                    provider_type_id=template.id,
+                    proposed_start_date=request.provider.proposed_start_date,
+                ),
+                {
+                    r.name: Requirement(
+                        name=r.name, status=r.status, deadline=r.deadline
+                    )
+                    for r in request.provider.requirements
+                },
+            )
+
+    provider = asyncio.run(prepare())
     return client.post(
         "/updates/analyze",
         json={
-            "provider_id": str(KEKOA_ID),
+            "provider_id": provider.id,
             "request_id": str(uuid4()),
             "update_text": request.update_text,
         },

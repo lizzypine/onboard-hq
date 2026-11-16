@@ -50,26 +50,41 @@ class AnalyzeUpdateResponse(BaseModel):
     ambiguities: list[str] = Field(default_factory=list)
 
 
+RecordId = Annotated[int, Field(strict=True, gt=0)]
+
+
 class StoredRequirement(Requirement):
-    id: UUID
-    provider_id: UUID
-    source_template_id: UUID | None = None
+    id: RecordId
+    provider_id: RecordId
+    checklist_template_id: RecordId
+    requirement_definition_id: RecordId
     scheduled_date: date | None = None
     version: int = Field(ge=0)
 
 
-class ProviderSummary(BaseModel):
-    id: UUID
+class ProviderProfile(BaseModel):
+    id: RecordId
+    creation_request_id: UUID
+    checklist_template_id: RecordId
+    template_version: int = Field(gt=0)
     name: str
     provider_type: str
     proposed_start_date: date | None = None
+
+
+class ProviderSummary(ProviderProfile):
+    archived_at: datetime | None = None
+
+
+class CapturedProvider(ProviderProfile):
+    requirements: list[StoredRequirement]
 
 
 class StoredProvider(ProviderSummary):
     requirements: list[StoredRequirement]
 
 
-def to_provider_context(provider: StoredProvider) -> ProviderContext:
+def to_provider_context(provider: StoredProvider | CapturedProvider) -> ProviderContext:
     return ProviderContext(
         provider_id=str(provider.id),
         name=provider.name,
@@ -89,14 +104,14 @@ FailureCategory = Literal["configuration", "timeout", "model"]
 
 class SubmitUpdateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    provider_id: UUID
+    provider_id: RecordId
     request_id: UUID
     update_text: NonBlank
 
 
 class ReviewDecision(BaseModel):
-    id: UUID
-    suggestion_id: UUID
+    id: RecordId
+    suggestion_id: RecordId
     outcome: Literal["approved", "corrected", "rejected"]
     previous_status: str
     previous_scheduled_date: date | None
@@ -107,18 +122,18 @@ class ReviewDecision(BaseModel):
 
 
 class SavedSuggestion(SuggestedChange):
-    id: UUID
-    requirement_id: UUID
+    id: RecordId
+    requirement_id: RecordId
     requirement_version: int = Field(ge=0)
     decision: ReviewDecision | None = None
 
 
 class SavedUpdate(BaseModel):
-    id: UUID
+    id: RecordId
     request_id: UUID
-    provider_id: UUID
+    provider_id: RecordId
     update_text: str
-    provider_snapshot: StoredProvider
+    provider_snapshot: CapturedProvider
     processing_state: Literal["processing", "completed", "failed"]
     message: str
     suggestions: list[SavedSuggestion]

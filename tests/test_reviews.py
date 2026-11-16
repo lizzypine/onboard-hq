@@ -28,7 +28,7 @@ def post_suggestion(client, provider, extraction_model, inferred=False):
     result = client.post(
         "/updates/analyze",
         json={
-            "provider_id": str(provider.id),
+            "provider_id": provider.id,
             "request_id": str(uuid4()),
             "update_text": "Drug screening update.",
         },
@@ -230,7 +230,7 @@ def test_multiple_requirements_can_be_reviewed_independently(
     saved = client.post(
         "/updates/analyze",
         json={
-            "provider_id": str(seeded_provider.id),
+            "provider_id": seeded_provider.id,
             "request_id": str(uuid4()),
             "update_text": "Drug screening completed. Credentialing returned for missing info.",
         },

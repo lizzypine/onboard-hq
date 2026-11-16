@@ -20,9 +20,9 @@ from app.rules.providers import (
 def profile(**changes):
     return CreateProviderRequest.model_validate(
         {
-            "id": uuid4(),
+            "creation_request_id": uuid4(),
             "name": "  Dr. Avery Example  ",
-            "provider_type_id": uuid4(),
+            "provider_type_id": 7,
             **changes,
         }
     )
@@ -39,7 +39,7 @@ def test_creation_name_is_trimmed_and_start_date_is_optional():
     "changes",
     [
         {"name": " "},
-        {"id": "bad"},
+        {"creation_request_id": "bad"},
         {"provider_type_id": "bad"},
         {"proposed_start_date": "2026-02-30"},
         {"requirements": []},
@@ -69,7 +69,7 @@ def test_identical_creation_identity_is_accepted():
     "change",
     [
         {"name": "Other Example"},
-        {"provider_type_id": uuid4()},
+        {"provider_type_id": 99},
         {"proposed_start_date": date(2027, 1, 15)},
     ],
 )

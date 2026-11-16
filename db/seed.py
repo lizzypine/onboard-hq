@@ -5,12 +5,14 @@ from datetime import date
 from uuid import NAMESPACE_URL, uuid5
 
 from app.database import DatabasePool, create_pool, database_url
-from app.models import ProviderSummary, Requirement
+from app.models import Requirement, StoredProvider
+from app.provider_models import CreateProviderRequest
 from app.repository import connection
+from app.repository.catalog import CatalogRepository
 from app.repository.providers import ProviderRepository
+from db.queries import fetch_provider
 
-KEKOA_ID = uuid5(NAMESPACE_URL, "onboard-hq:provider:kekoa-ejemplo")
-DENTIST_ID = uuid5(NAMESPACE_URL, "onboard-hq:type:dentist")
+KEKOA_CREATION_REQUEST_ID = uuid5(NAMESPACE_URL, "onboard-hq:provider:kekoa-ejemplo")
 INITIAL_STATUSES = {
     "Offer letter": "Signed",
     "Hawaii dental license": "Received",
@@ -20,29 +22,43 @@ INITIAL_STATUSES = {
 }
 
 
-async def seed_synthetic(pool: DatabasePool) -> None:
+async def seed_synthetic(pool: DatabasePool) -> StoredProvider:
     async with connection(pool) as conn:
-        await conn.execute(
-            "INSERT INTO provider_types(id,name) VALUES (%s,'Dentist') ON CONFLICT(id) DO NOTHING",
-            (DENTIST_ID,),
-        )
-        for name in INITIAL_STATUSES:
-            key = uuid5(NAMESPACE_URL, "onboard-hq:template:dentist:" + name)
+        existing = await (
             await conn.execute(
-                "INSERT INTO requirement_templates(id,provider_type_id,name) VALUES (%s,%s,%s) ON CONFLICT(id) DO NOTHING",
-                (key, DENTIST_ID, name),
+                "SELECT id FROM providers WHERE creation_request_id=%s",
+                (KEKOA_CREATION_REQUEST_ID,),
             )
-    await ProviderRepository(pool).initialize_provider(
-        ProviderSummary(
-            id=KEKOA_ID,
+        ).fetchone()
+        if existing is not None:
+            return await fetch_provider(conn, existing["id"])
+        latest = await (
+            await conn.execute("""SELECT c.template_version FROM checklist_templates c
+            JOIN provider_types t ON t.id=c.provider_type_id WHERE lower(btrim(t.name))='dentist'
+            ORDER BY c.template_version DESC LIMIT 1""")
+        ).fetchone()
+        if latest is not None and latest["template_version"] != 1:
+            raise ValueError(
+                "Existing Dentist catalog differs from the synthetic seed; no changes made."
+            )
+    template = await CatalogRepository(pool).ensure_version(
+        "Dentist", list(INITIAL_STATUSES), template_version=1
+    )
+    return await ProviderRepository(pool).initialize_provider(
+        CreateProviderRequest(
+            creation_request_id=KEKOA_CREATION_REQUEST_ID,
             name="Dr. Kekoa Ejemplo",
-            provider_type="Dentist",
+            provider_type_id=template.id,
             proposed_start_date=date(2026, 12, 1),
         ),
-        DENTIST_ID,
         {
-            name: Requirement(name=name, status=status)
-            for name, status in INITIAL_STATUSES.items()
+            name: Requirement(
+                name=name,
+                status={key.lower(): value for key, value in INITIAL_STATUSES.items()}[
+                    name.strip(" ").lower()
+                ],
+            )
+            for name in template.requirements
         },
     )
 

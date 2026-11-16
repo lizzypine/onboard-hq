@@ -12,6 +12,7 @@ from app import main
 from app.monitoring import get_monitoring_date
 from app.repository.providers import ProviderRepository
 from tests.database import configured_test_url, disposable_database
+from tests.fixtures.current_database import configure_catalog
 
 AS_OF = date(2026, 11, 11)
 MANAGER = {"X-Demo-Role": "manager"}
@@ -43,7 +44,12 @@ def row_and_indicator(data, name):
 def application_rows():
     tables = (
         "provider_types",
-        "requirement_templates",
+        "requirement_definitions",
+        "checklist_templates",
+        "template_requirements",
+        "update_requirement_snapshots",
+        "update_ambiguities",
+        "checklist_edits",
         "providers",
         "requirements",
         "updates",
@@ -53,9 +59,9 @@ def application_rows():
     with psycopg.connect(configured_test_url()) as conn:
         return {
             name: conn.execute(
-                sql.SQL("SELECT to_jsonb(t) FROM {} t ORDER BY id").format(
-                    sql.Identifier(name)
-                )
+                sql.SQL(
+                    "SELECT to_jsonb(t) FROM {} t ORDER BY to_jsonb(t)::text"
+                ).format(sql.Identifier(name))
             ).fetchall()
             for name in tables
         }
@@ -74,7 +80,7 @@ def submit_change(client, provider, extraction_model):
     response = client.post(
         "/updates/analyze",
         json={
-            "provider_id": str(provider.id),
+            "provider_id": provider.id,
             "request_id": str(uuid4()),
             "update_text": "Drug screening completed.",
         },
@@ -129,7 +135,7 @@ def test_dashboard_uses_one_provider_and_date_snapshot(
         if len(reads) == 1:
             async with repository.pool.connection() as conn:
                 await conn.execute(
-                    "UPDATE requirements SET status='Completed' WHERE provider_id=%s AND name='Drug screening'",
+                    "UPDATE requirements SET status='Completed' WHERE provider_id=%s AND requirement_definition_id IN (SELECT id FROM requirement_definitions WHERE name='Drug screening')",
                     (provider_id,),
                 )
         return captured
@@ -171,19 +177,21 @@ def test_dashboard_reads_do_not_modify_records_or_snapshots(
 
 
 def test_unknown_type_does_not_adopt_dentist_rules(client):
-    type_id, provider_id, requirement_id = uuid4(), uuid4(), uuid4()
+    template = configure_catalog("Synthetic Other Type", ["Drug screening"])
+    created = client.post(
+        "/providers",
+        headers=MANAGER,
+        json={
+            "creation_request_id": str(uuid4()),
+            "name": "Synthetic Other Provider",
+            "provider_type_id": template.id,
+        },
+    ).json()
+    provider_id = created["id"]
     with psycopg.connect(configured_test_url()) as conn:
         conn.execute(
-            "INSERT INTO provider_types(id,name) VALUES (%s,'Synthetic Other Type')",
-            (type_id,),
-        )
-        conn.execute(
-            "INSERT INTO providers(id,provider_type_id,name) VALUES (%s,%s,'Synthetic Other Provider')",
-            (provider_id, type_id),
-        )
-        conn.execute(
-            "INSERT INTO requirements(id,provider_id,provider_type_id,name,status,deadline) VALUES (%s,%s,%s,'Drug screening','Completed','2026-11-10')",
-            (requirement_id, provider_id, type_id),
+            "UPDATE requirements SET status='Completed',deadline='2026-11-10' WHERE provider_id=%s",
+            (provider_id,),
         )
     response = client.get(f"/providers/{provider_id}/dashboard")
     assert response.status_code == 200
@@ -217,7 +225,7 @@ def test_empty_checklist_returns_zero_counts(client, seeded_provider):
 
 
 def test_dashboard_reports_missing_and_malformed_provider_ids(client):
-    assert client.get(f"/providers/{uuid4()}/dashboard").status_code == 404
+    assert client.get("/providers/999999999/dashboard").status_code == 404
     assert client.get("/providers/not-a-uuid/dashboard").status_code == 422
 
 
@@ -225,7 +233,7 @@ def test_dashboard_reports_missing_configuration_safely(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     with TestClient(main.create_app()) as test_client:
         assert test_client.get("/").status_code == 200
-        result = test_client.get(f"/providers/{uuid4()}/dashboard")
+        result = test_client.get("/providers/999999999/dashboard")
         assert result.status_code == 503
         assert "postgresql://" not in result.text
 
@@ -234,7 +242,7 @@ def test_dashboard_reports_missing_schema_safely(monkeypatch):
     with disposable_database() as url:
         monkeypatch.setenv("DATABASE_URL", url)
         with TestClient(main.create_app()) as test_client:
-            result = test_client.get(f"/providers/{uuid4()}/dashboard")
+            result = test_client.get("/providers/999999999/dashboard")
             assert result.status_code == 503
             assert "postgresql://" not in result.text
             assert "UndefinedTable" not in result.text
@@ -302,7 +310,7 @@ def test_dashboard_monitors_saved_status_and_deadline_cases(
 ):
     with psycopg.connect(configured_test_url()) as conn:
         conn.execute(
-            "UPDATE requirements SET status=%s,deadline=%s WHERE provider_id=%s AND name=%s",
+            "UPDATE requirements SET status=%s,deadline=%s WHERE provider_id=%s AND requirement_definition_id IN (SELECT id FROM requirement_definitions WHERE name=%s)",
             (status, deadline, seeded_provider.id, name),
         )
     result = dashboard(client, seeded_provider)
@@ -325,7 +333,7 @@ def test_monitoring_changes_only_after_approved_status_updates(
 ):
     with psycopg.connect(configured_test_url()) as conn:
         conn.execute(
-            "UPDATE requirements SET deadline='2026-11-10' WHERE provider_id=%s AND name='Drug screening'",
+            "UPDATE requirements SET deadline='2026-11-10' WHERE provider_id=%s AND requirement_definition_id IN (SELECT id FROM requirement_definitions WHERE name='Drug screening')",
             (seeded_provider.id,),
         )
     initial = dashboard(client, seeded_provider)["monitoring"]

@@ -14,8 +14,7 @@ from app import main
 from app.agent import AnalyzeUpdateRequest, ProviderContext, Requirement, build_agent
 from app.database import create_pool
 from app.models import StoredProvider
-from app.repository.providers import ProviderRepository
-from app.seed import KEKOA_ID, seed_synthetic
+from app.seed import seed_synthetic
 from tests.database import ROOT, configured_test_url, migrate_test_database
 from tests.local_postgres import stop_local_database
 
@@ -36,7 +35,7 @@ def db_url() -> str:
     migrate_test_database(url)
     with psycopg.connect(url) as conn:
         conn.execute(
-            "TRUNCATE checklist_edits,review_decisions,suggestions,updates,requirements,providers,requirement_templates,provider_types"
+            "TRUNCATE checklist_edits,review_decisions,suggestions,update_ambiguities,update_requirement_snapshots,updates,requirements,providers,template_requirements,checklist_templates,requirement_definitions,provider_types"
         )
     return url
 
@@ -45,8 +44,7 @@ def db_url() -> str:
 def seeded_provider(db_url: str) -> StoredProvider:
     async def prepare() -> StoredProvider:
         async with create_pool(db_url) as pool:
-            await seed_synthetic(pool)
-            return await ProviderRepository(pool).get_provider(KEKOA_ID)
+            return await seed_synthetic(pool)
 
     return asyncio.run(prepare())
 

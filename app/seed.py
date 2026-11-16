@@ -1,10 +1,10 @@
-"""Compatibility entry point for the explicit database seed in db.seed."""
+"""Compatibility CLI for the explicit synthetic database seed."""
 
 import asyncio
 
-from db.seed import DENTIST_ID, INITIAL_STATUSES, KEKOA_ID, main, seed_synthetic
+from db.seed import INITIAL_STATUSES, KEKOA_CREATION_REQUEST_ID, main, seed_synthetic
 
-__all__ = ["DENTIST_ID", "INITIAL_STATUSES", "KEKOA_ID", "main", "seed_synthetic"]
+__all__ = ["INITIAL_STATUSES", "KEKOA_CREATION_REQUEST_ID", "main", "seed_synthetic"]
 
 if __name__ == "__main__":
     asyncio.run(main())
