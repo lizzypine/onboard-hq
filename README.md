@@ -45,7 +45,9 @@ Install PostgreSQL 18 tools (on macOS: `brew install postgresql@18`), then run
 `bash scripts/install-dbmate.sh` to install checksum-verified dbmate 2.38.1 in
 the ignored `.superpowers/bin` directory. Set `DATABASE_URL` to Neon's pooled
 connection and `DATABASE_URL_UNPOOLED` to its direct connection in `.env`.
-Run schema migrations explicitly, with PostgreSQL 18's tools on PATH:
+For an existing UUID-era database, follow the [cutover runbook](docs/database-cutover.md)
+before migrating. The final backup must follow the write freeze. Run schema
+migrations explicitly, with PostgreSQL 18's tools on PATH:
 
 ```sh
 npx dbmate --no-dump-schema -e DATABASE_URL_UNPOOLED migrate
