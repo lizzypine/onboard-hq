@@ -1,6 +1,7 @@
 "use strict";
 
 import {statusBadge, statusSelect} from "./statuses.js";
+import {inspectLegacyAttempt, legacyAttemptKey, recoverLegacyAttempt} from "./checklist-recovery.js?v=2";
 
 const pendingKey = "onboard-hq:pending-checklist-edit:v2";
 
@@ -31,7 +32,7 @@ function monitoringLabel(indicator) {
   return indicator.deadline_state === "due_today" ? "Outstanding — due today" : "Outstanding";
 }
 
-export function setupChecklist({api, roleSelect, setBusy, onSaved}) {
+export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvider}) {
   const body = document.getElementById("requirements");
   const notice = document.getElementById("checklist-status");
   const retry = document.getElementById("retry-checklist");
@@ -39,6 +40,64 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved}) {
   let busy = false, editId = null, draft = null, syncDraft = null;
   let pending = restoreAttempt();
   let message = pending ? "A checklist save needs confirmation. Retry the saved attempt." : "";
+
+  let legacyAttempt = null, legacyResult = null, legacyBusy = false, legacyMessage = "";
+  try { legacyAttempt = inspectLegacyAttempt(sessionStorage); } catch { /* Keep current in-memory recovery available. */ }
+  const legacyRegion = document.createElement("section");
+  legacyRegion.setAttribute("aria-label", "Older checklist save");
+  const legacyStatus = text(legacyRegion, "p", "");
+  legacyStatus.id = "legacy-checklist-status";
+  legacyStatus.setAttribute("role", "status");
+  const checkLegacy = text(legacyRegion, "button", "Check older save");
+  checkLegacy.type = "button";
+  const dismissLegacy = text(legacyRegion, "button", "Dismiss older save");
+  dismissLegacy.type = "button";
+  notice.after(legacyRegion);
+
+  function renderLegacy() {
+    legacyRegion.hidden = !legacyAttempt && !legacyMessage;
+    const details = legacyAttempt ? "Older checklist save for " + legacyAttempt.providerName
+      + ". Status: " + legacyAttempt.body.status + ". Requirement date: " + (legacyAttempt.body.scheduled_date || "Not set")
+      + ". Deadline: " + (legacyAttempt.body.deadline || "Not set") + ". " : "";
+    legacyStatus.textContent = details + legacyMessage;
+    checkLegacy.hidden = dismissLegacy.hidden = !legacyAttempt;
+    checkLegacy.disabled = dismissLegacy.disabled = busy || legacyBusy;
+  }
+
+  function forgetLegacy() {
+    legacyAttempt = null;
+    legacyResult = null;
+    try { sessionStorage.removeItem(legacyAttemptKey); } catch { /* A future reload can safely confirm again. */ }
+  }
+
+  async function recoverLegacy() {
+    if (!legacyAttempt || legacyBusy) return;
+    legacyBusy = true;
+    setBusy(true);
+    legacyMessage = "Checking saved history…";
+    renderLegacy();
+    try {
+      legacyResult = await recoverLegacyAttempt({api, attempt: legacyAttempt});
+      if (legacyResult.kind === "saved") {
+        legacyMessage = "This older checklist save was already saved. Loading its current checklist and history…";
+        await onLegacyProvider(legacyResult.provider);
+      } else {
+        legacyMessage = legacyResult.event
+          ? "The operation has different saved values. This draft is retained; no change was submitted."
+          : "The saved operation is unavailable. This draft is retained until you dismiss it; no change was submitted.";
+      }
+    } catch {
+      legacyMessage = "The current saved view is unavailable. This draft is retained; check again when data loads.";
+    } finally {
+      legacyBusy = false;
+      setBusy(false);
+      renderLegacy();
+    }
+  }
+
+  checkLegacy.addEventListener("click", recoverLegacy);
+  dismissLegacy.addEventListener("click", () => { forgetLegacy(); legacyMessage = ""; renderLegacy(); });
+  renderLegacy();
 
   function remember() {
     try {
@@ -61,6 +120,7 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved}) {
     body.querySelectorAll(".checklist-edit-button").forEach(button => { button.disabled = busy || Boolean(pending); });
     if (syncDraft) syncDraft();
     showNotice();
+    renderLegacy();
   }
 
   async function sendAttempt() {
@@ -181,6 +241,7 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved}) {
 
   retry.addEventListener("click", sendAttempt);
   return {
+    recoverLegacy,
     render(nextProvider, nextMonitoring, nextOptions) {
       const previous = provider?.requirements.find(r => r.id === editId);
       const next = nextProvider?.requirements.find(r => r.id === editId);
@@ -195,7 +256,13 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved}) {
     setBusy(value) { busy = value; syncControls(); },
     resetDraft() { editId = null; draft = null; draw(); },
     syncRole() { editId = null; draft = null; draw(); },
-    onSnapshotLoaded() {
+    onSnapshotLoaded(edits = []) {
+      if (legacyResult?.kind === "saved" && provider?.id === legacyResult.provider.id
+          && edits.some(event => event.id === legacyResult.event.id && event.operation_id === legacyResult.event.operation_id)) {
+        forgetLegacy();
+        legacyMessage = "This older checklist save was already saved. The current checklist and history are loaded.";
+        renderLegacy();
+      }
       if (pending?.confirmed && provider?.id === pending.providerId) {
         pending = null;
         remember();

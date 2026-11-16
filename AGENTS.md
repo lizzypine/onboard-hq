@@ -27,6 +27,7 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 - `app/page.py`: page markup; `app/static/onboarding.js`: coherent provider selection/loading, creation recovery, history display, and saved-review orchestration.
 - `app/static/providers.js`: manager creation form, configured-template preview, stable save identity, and duplicate-name labels. No analysis or review calls.
 - `app/static/checklist.js`: saved checklist rows, status badges, one Manager edit draft, and frozen manual-save recovery. No provider/history loading or model calls.
+- `app/static/checklist-recovery.js`: validate frozen UUID-era drafts and read saved history by retained retry keys; no save POSTs or model calls. The checklist controller clears resolved drafts only after a coherent saved view loads.
 - `app/static/statuses.js`: safe native status dropdown and labeled badge DOM helpers; choices and tones come from the dashboard.
 - `app/static/review.js`: one suggestion's editable checklist comparison, draft date actions, validation, and manager decision callbacks. No data loading or persistence.
 - `app/agent.py`: the Pydantic AI agent and output models.

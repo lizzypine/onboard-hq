@@ -170,7 +170,7 @@ async function loadState() {
   state.checklistOptions = dashboard.checklist_options;
   renderChecklist();
   renderHistory();
-  checklist?.onSnapshotLoaded();
+  checklist?.onSnapshotLoaded(state.edits);
 }
 
 function clearSnapshot() {
@@ -234,7 +234,11 @@ document.getElementById("update-form").addEventListener("submit", async event =>
 });
 
 updateText.addEventListener("input", () => { state.pending = null; });
-checklist = setupChecklist({api, roleSelect, setBusy, onSaved: loadState});
+checklist = setupChecklist({api, roleSelect, setBusy, onSaved: loadState, onLegacyProvider: async provider => {
+  document.getElementById("provider-state").value = provider.archived_at ? "archived" : "active";
+  state.preferredProviderId = provider.id;
+  if (!await initialize(provider.id) || state.provider?.id !== provider.id) throw new Error("Saved view unavailable.");
+}});
 creation = setupProviderCreation({api, roleSelect, setBusy, onCreated: async id => {
   state.preferredProviderId = id;
   updateText.value = "";
@@ -251,7 +255,7 @@ providerSelect.addEventListener("change", () => {
   disclosure.open = false;
   initialize();
 });
-refreshButton.addEventListener("click", () => initialize());
-initialize();
+refreshButton.addEventListener("click", async () => { await initialize(); await checklist.recoverLegacy(); });
+initialize().then(() => checklist.recoverLegacy());
 
 document.getElementById("provider-state").addEventListener("change", () => initialize());
