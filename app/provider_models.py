@@ -5,18 +5,20 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models import NonBlank
+from app.models import NonBlank, RecordId
 
 
 class CreateProviderRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    id: UUID
+    creation_request_id: UUID
     name: NonBlank
-    provider_type_id: UUID
+    provider_type_id: RecordId
     proposed_start_date: date | None = None
 
 
 class ProviderTypeTemplate(BaseModel):
-    id: UUID
+    id: RecordId
+    checklist_template_id: RecordId
+    template_version: int
     name: str
     requirements: list[str]

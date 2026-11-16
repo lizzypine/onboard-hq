@@ -6,10 +6,12 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.models import RecordId
+
 
 class ChecklistEditRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    id: UUID
+    operation_id: UUID
     expected_version: Annotated[int, Field(strict=True, ge=0)]
     status: str
     scheduled_date: date | None
@@ -24,9 +26,10 @@ class ChecklistEditRequest(BaseModel):
 
 
 class ChecklistEdit(BaseModel):
-    id: UUID
-    provider_id: UUID
-    requirement_id: UUID
+    id: RecordId
+    operation_id: UUID
+    provider_id: RecordId
+    requirement_id: RecordId
     requirement_name: str
     expected_version: int
     resulting_version: int
@@ -41,6 +44,6 @@ class ChecklistEdit(BaseModel):
 
 
 class RequirementEditOptions(BaseModel):
-    requirement_id: UUID
+    requirement_id: RecordId
     statuses: list[str]
     status_tone: Literal["finished", "progress", "attention", "unknown"]

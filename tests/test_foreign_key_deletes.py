@@ -10,7 +10,8 @@ import pytest
 from psycopg import sql
 from psycopg.errors import ForeignKeyViolation, RaiseException, RestrictViolation
 
-from tests.database import ROOT, disposable_database, migrate_test_database
+from tests.database import ROOT, disposable_database
+from tests.fixtures.legacy_database import migrate_legacy as migrate_test_database
 
 TABLES = (
     "providers",
@@ -83,10 +84,12 @@ def assert_provider_cascade(conn, records):
 
 
 @pytest.fixture
-def history(db_url):
-    with psycopg.connect(db_url) as conn:
-        yield conn, add_shared_histories(conn)
-        conn.rollback()
+def history():
+    with disposable_database() as url:
+        migrate_test_database(url)
+        with psycopg.connect(url) as conn:
+            yield conn, add_shared_histories(conn)
+            conn.rollback()
 
 
 def test_provider_delete_removes_owned_history_and_preserves_shared_records(history):

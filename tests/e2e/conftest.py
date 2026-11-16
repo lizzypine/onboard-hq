@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 from datetime import date
+from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -17,12 +18,20 @@ from tests.database import ROOT, require_disposable_database
 
 
 class AppServer:
-    def __init__(self, database_url, log_path, *, as_of: date = date(2026, 11, 11)):
+    def __init__(
+        self,
+        database_url,
+        log_path,
+        *,
+        as_of: date = date(2026, 11, 11),
+        source_root: Path = ROOT,
+    ):
         require_disposable_database(database_url, None)
         with socket.socket() as probe:
             probe.bind(("127.0.0.1", 0))
             self.port = probe.getsockname()[1]
         self.url = f"http://127.0.0.1:{self.port}"
+        self.source_root = source_root
         self.database_url = database_url
         self.scenario = "completed"
         self.as_of = as_of
@@ -45,11 +54,11 @@ class AppServer:
                 "--as-of",
                 self.as_of.isoformat(),
             ],
-            cwd=ROOT,
+            cwd=self.source_root,
             env={
                 "PATH": os.environ["PATH"],
                 "DATABASE_URL": self.database_url,
-                "PYTHONPATH": str(ROOT),
+                "PYTHONPATH": str(self.source_root),
                 "PYTHONUNBUFFERED": "1",
             },
             stdout=self.log_handle,

@@ -7,21 +7,46 @@ import pytest
 from pydantic import ValidationError
 
 
+def test_update_contract_accepts_integer_resource_and_uuid_retry_key():
+    from app.models import SubmitUpdateRequest
+
+    key = uuid4()
+    request = SubmitUpdateRequest(
+        provider_id=17, request_id=key, update_text="Synthetic"
+    )
+    assert request.provider_id == 17
+    assert request.request_id == key
+
+
+@pytest.mark.parametrize("value", [True, 1.0, 0, -1, "17", str(uuid4())])
+def test_update_contract_rejects_non_integer_or_nonpositive_resource_ids(value):
+    from app.models import SubmitUpdateRequest
+
+    with pytest.raises(ValidationError):
+        SubmitUpdateRequest(
+            provider_id=value, request_id=uuid4(), update_text="Synthetic"
+        )
+
+
 def test_stored_provider_converts_to_model_context_without_database_fields():
     from app.models import StoredProvider, to_provider_context
 
-    provider_id = uuid4()
+    provider_id = 17
     provider = StoredProvider.model_validate(
         {
-            "id": str(provider_id),
+            "id": provider_id,
+            "creation_request_id": str(uuid4()),
+            "checklist_template_id": 8,
+            "template_version": 1,
             "name": "Synthetic provider",
             "provider_type": "Dentist",
             "proposed_start_date": "2026-12-01",
             "requirements": [
                 {
-                    "id": str(uuid4()),
-                    "provider_id": str(provider_id),
-                    "source_template_id": None,
+                    "id": 18,
+                    "provider_id": provider_id,
+                    "checklist_template_id": 8,
+                    "requirement_definition_id": 9,
                     "name": "Synthetic requirement",
                     "status": "Outstanding",
                     "deadline": None,
@@ -46,9 +71,10 @@ def test_stored_requirement_rejects_negative_version():
 
     with pytest.raises(ValidationError):
         StoredRequirement(
-            id=uuid4(),
-            provider_id=uuid4(),
-            source_template_id=None,
+            id=18,
+            provider_id=17,
+            checklist_template_id=8,
+            requirement_definition_id=9,
             name="Test",
             status="Outstanding",
             scheduled_date=None,

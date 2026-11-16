@@ -9,8 +9,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import main
-from app.seed import DENTIST_ID
 from tests.database import configured_test_url, disposable_database
+from tests.fixtures.current_database import configure_catalog, provider_type_id
 
 MANAGER = {"X-Demo-Role": "manager"}
 
@@ -25,7 +25,7 @@ def requirement(client, provider_id, name="Drug screening"):
 
 def edit_body(row, **changes):
     return {
-        "id": str(uuid4()),
+        "operation_id": str(uuid4()),
         "expected_version": row["version"],
         "status": "Completed",
         "scheduled_date": "2026-11-12",
@@ -66,7 +66,7 @@ def analyze(client, extraction_model, provider_id):
         "/updates/analyze",
         json={
             "request_id": str(uuid4()),
-            "provider_id": str(provider_id),
+            "provider_id": provider_id,
             "update_text": "Drug screening completed.",
         },
     )
@@ -82,9 +82,9 @@ def test_manual_save_records_before_after_and_independent_provider(
         "/providers",
         headers=MANAGER,
         json={
-            "id": str(uuid4()),
+            "creation_request_id": str(uuid4()),
             "name": "Dr. Avery Example",
-            "provider_type_id": str(DENTIST_ID),
+            "provider_type_id": provider_type_id(),
         },
     ).json()
     row = requirement(client, new["id"])
@@ -208,11 +208,11 @@ def test_noop_stale_and_wrong_provider_edits_do_not_write(client, seeded_provide
     )
     assert (
         client.post(
-            endpoint(uuid4(), row["id"]), headers=MANAGER, json=edit_body(row)
+            endpoint(999999999, row["id"]), headers=MANAGER, json=edit_body(row)
         ).status_code
         == 404
     )
-    assert client.get(f"/providers/{uuid4()}/checklist-edits").status_code == 404
+    assert client.get("/providers/999999999/checklist-edits").status_code == 404
     assert history(client, seeded_provider.id) == []
 
 
@@ -259,7 +259,7 @@ def test_concurrent_edits_have_one_winning_mutation(client, seeded_provider, kin
     if kind == "conflicting_id":
         second["status"] = "Incomplete"
     if kind == "conflicting_version":
-        second["id"] = str(uuid4())
+        second["operation_id"] = str(uuid4())
     with ThreadPoolExecutor(max_workers=2) as executor:
         results = list(
             executor.map(
@@ -334,22 +334,14 @@ def test_unfamiliar_verbatim_status_and_other_type_do_not_gain_dentist_rules(
     assert choices["status_tone"] == "finished"
     saved = save(client, seeded_provider.id, row, edit_body(row, status="  rEcEiVeD  "))
     assert saved["applied_status"] == "  rEcEiVeD  "
-    type_id = uuid4()
-    with psycopg.connect(configured_test_url()) as conn:
-        conn.execute(
-            "INSERT INTO provider_types VALUES (%s,'Synthetic Other')", (type_id,)
-        )
-        conn.execute(
-            "INSERT INTO requirement_templates VALUES (%s,%s,'Drug screening')",
-            (uuid4(), type_id),
-        )
+    type_id = configure_catalog("Synthetic Other", ["Drug screening"]).id
     new = client.post(
         "/providers",
         headers=MANAGER,
         json={
-            "id": str(uuid4()),
+            "creation_request_id": str(uuid4()),
             "name": "Other Fictional",
-            "provider_type_id": str(type_id),
+            "provider_type_id": type_id,
         },
     ).json()
     other = requirement(client, new["id"])
@@ -405,7 +397,7 @@ def test_saved_manual_audit_is_immutable_in_postgresql(client, seeded_provider):
 
 def test_manual_endpoints_fail_safely_without_configuration_or_schema(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    path = endpoint(uuid4(), uuid4())
+    path = endpoint(999999999, 999999998)
     body = edit_body({"version": 0})
     with TestClient(main.create_app()) as test_client:
         result = test_client.post(path, headers=MANAGER, json=body)

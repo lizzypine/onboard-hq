@@ -2,19 +2,18 @@
 
 from datetime import date
 from typing import Literal
-from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from app.checklist_models import RequirementEditOptions
-from app.models import StoredProvider
+from app.models import RecordId, StoredProvider
 
 Completion = Literal["finished", "outstanding", "needs_review"]
 DeadlineState = Literal["not_set", "upcoming", "due_today", "past"]
 
 
 class RequirementMonitoring(BaseModel):
-    requirement_id: UUID
+    requirement_id: RecordId
     completion: Completion
     deadline_state: DeadlineState
 

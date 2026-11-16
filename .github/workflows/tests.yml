@@ -28,6 +28,8 @@ jobs:
       PLAYWRIGHT_BROWSERS_PATH: .superpowers/browsers
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@v10.3.1
       - run: npm ci --ignore-scripts
       - name: Install PostgreSQL 18 tools for isolated runner tests

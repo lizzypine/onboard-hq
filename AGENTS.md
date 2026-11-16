@@ -27,12 +27,13 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 - `app/page.py`: page markup; `app/static/onboarding.js`: coherent provider selection/loading, creation recovery, history display, and saved-review orchestration.
 - `app/static/providers.js`: manager creation form, configured-template preview, stable save identity, and duplicate-name labels. No analysis or review calls.
 - `app/static/checklist.js`: saved checklist rows, status badges, one Manager edit draft, and frozen manual-save recovery. No provider/history loading or model calls.
+- `app/static/checklist-recovery.js`: validate frozen UUID-era drafts and read saved history by retained retry keys; no save POSTs or model calls. The checklist controller clears resolved drafts only after a coherent saved view loads.
 - `app/static/statuses.js`: safe native status dropdown and labeled badge DOM helpers; choices and tones come from the dashboard.
 - `app/static/review.js`: one suggestion's editable checklist comparison, draft date actions, validation, and manager decision callbacks. No data loading or persistence.
 - `app/agent.py`: the Pydantic AI agent and output models.
 - `app/updates.py`: extraction, scope filtering, and date-resolution orchestration. No HTTP or UI code.
 - `app/database.py`: environment configuration and PostgreSQL connection lifecycle. No routes or model calls.
-- `app/models.py`: shared Pydantic context, stored-record, and HTTP contracts.
+- `app/models.py`: shared Pydantic context, stored-record, captured-state, and HTTP contracts; integer resource IDs and distinct UUID retry keys.
 - `app/provider_models.py`: provider-creation and configured type-template catalog contracts.
 - `app/checklist_models.py`: direct checklist edit request/audit records and derived dropdown option contracts, separate from stored LLM evidence.
 - `app/checklist.py`: Manager-only direct-edit orchestration; no HTTP/model calls.
@@ -44,7 +45,10 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 - `app/monitoring_models.py`: derived dashboard contracts, separate from stored provider/context snapshots.
 - `app/monitoring.py`: Hawaii clock boundary and dashboard loading from one saved provider/checklist read.
 - `app/rules/monitoring.py`: pure completion, deadline, and count rules with an explicit as-of date. No clock or I/O.
-- `app/repository/providers.py`: PostgreSQL provider/type reads and atomic template-based checklist initialization with creation retry identities; the provider snapshot SELECT is in `db/queries.py`. Repository transaction helpers are in `app/repository/__init__.py`.
+- `app/repository/catalog.py`: immutable complete-checklist version configuration for seeds/tests; normalized names, no administration route.
+- `app/repository/snapshots.py`: save and reconstruct relational captured requirement state within the caller's transaction.
+- `app/rules/provider_state.py`: pure archived-state write guard; archived records remain viewable.
+- `app/repository/providers.py`: PostgreSQL provider/type reads and atomic template-based checklist initialization with creation retry identities; the provider/checklist SELECT is in `db/queries.py`. Repository transaction helpers are in `app/repository/__init__.py`.
 - `db/queries.py`: one parameterized `fetch_provider` query returning a typed provider and its own checklist; used by production repositories and tested directly in `tests/test_queries.py`.
 - `db/seed.py`: explicit, repeatable synthetic development seed; run with `python -m db.seed`. Never run at application startup. `app/seed.py` preserves the earlier CLI/imports for compatibility.
 - `app/repository/updates.py`: request claims, captured provider context, and saved suggestions/history.

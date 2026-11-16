@@ -16,7 +16,7 @@ from tests.database import configured_test_url
 
 def payload(provider):
     return {
-        "provider_id": str(provider.id),
+        "provider_id": provider.id,
         "request_id": str(uuid4()),
         "update_text": "Drug screening completed.",
     }
@@ -76,7 +76,7 @@ def test_identical_retry_returns_same_saved_result(
 
 
 @pytest.mark.parametrize(
-    "field,value", [("update_text", "Different message"), ("provider_id", str(uuid4()))]
+    "field,value", [("update_text", "Different message"), ("provider_id", 999999999)]
 )
 def test_request_id_cannot_be_reused_for_different_input(
     client, seeded_provider, field, value

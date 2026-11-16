@@ -10,9 +10,7 @@ function text(parent, tag, value) {
 export function providerLabel(provider, providers) {
   const matches = providers.filter(p => p.name === provider.name);
   if (matches.length < 2) return provider.name;
-  let length = 8;
-  while (length < provider.id.length && matches.some(p => p.id !== provider.id && p.id.startsWith(provider.id.slice(0, length)))) length++;
-  return provider.name + " · " + provider.provider_type + " · " + (provider.proposed_start_date || "Start not set") + " · Ref " + provider.id.slice(0, length);
+  return provider.name + " · " + provider.provider_type + " · " + (provider.proposed_start_date || "Start not set") + " · Ref " + provider.id;
 }
 
 export function setupProviderCreation({api, roleSelect, setBusy, onCreated}) {
@@ -31,7 +29,7 @@ export function setupProviderCreation({api, roleSelect, setBusy, onCreated}) {
   let savedId = null;
 
   function selectedType() {
-    return types.length === 1 ? types[0] : types.find(t => t.id === typeSelect.value);
+    return types.length === 1 ? types[0] : types.find(t => t.id === Number(typeSelect.value));
   }
   function sync() {
     open.hidden = roleSelect.value !== "manager" || !form.hidden;
@@ -95,7 +93,7 @@ export function setupProviderCreation({api, roleSelect, setBusy, onCreated}) {
   form.addEventListener("submit", async event => {
     event.preventDefault();
     if (save.disabled || busy || roleSelect.value !== "manager") return;
-    const payload = {id: creationId, name: name.value.trim(), provider_type_id: selectedType().id,
+    const payload = {creation_request_id: creationId, name: name.value.trim(), provider_type_id: selectedType().id,
       proposed_start_date: start.value || null};
     let saved = false;
     setBusy(true);

@@ -104,7 +104,7 @@ PAGE = """<!doctype html>
       .monitoring-counts { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
-  <script src="/static/onboarding.js" type="module"></script>
+  <script src="/static/onboarding.js?v=2" type="module"></script>
 </head>
 <body>
 <main>
@@ -122,7 +122,8 @@ PAGE = """<!doctype html>
   <section aria-labelledby="provider-heading">
     <div class="section-heading"><h2 id="provider-heading">1. Select a provider</h2>
       <button id="add-provider" type="button" hidden>Add provider</button></div>
-    <label for="provider">Provider</label>
+    <label>Provider view <select id="provider-state"><option value="active">Active</option><option value="archived">Archived</option></select></label>
+<label for="provider">Provider</label>
     <select id="provider" disabled><option>Loading providers…</option></select>
     <p id="provider-description"></p>
     <div class="actions">

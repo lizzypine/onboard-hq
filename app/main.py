@@ -4,10 +4,10 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
-from typing import Annotated
-from uuid import UUID
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Path as ApiPath
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -46,6 +46,7 @@ from app.rules.checklist import (
     ChecklistEditForbidden,
     ChecklistEditInvalid,
 )
+from app.rules.provider_state import ProviderArchivedConflict
 from app.rules.providers import ProviderCreationConflict, ProviderCreationForbidden
 from app.rules.review import ReviewConflict, ReviewForbidden, ReviewValidationError
 
@@ -68,6 +69,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 
 
 router = APIRouter()
+ResourcePath = Annotated[int, ApiPath(gt=0)]
 
 
 def get_pool(request: Request) -> DatabasePool:
@@ -99,8 +101,9 @@ async def missing_record(_request: Request, _error: Exception) -> JSONResponse:
 @router.get("/providers", response_model=list[ProviderSummary])
 async def providers(
     repository: Annotated[ProviderRepository, Depends(get_repository)],
+    state: Literal["active", "archived", "all"] = "active",
 ) -> list[ProviderSummary]:
-    return await repository.list_providers()
+    return await repository.list_providers(state)
 
 
 @router.get("/provider-types", response_model=list[ProviderTypeTemplate])
@@ -121,7 +124,7 @@ async def create_provider(
 
 @router.get("/providers/{provider_id}", response_model=StoredProvider)
 async def provider(
-    provider_id: UUID,
+    provider_id: ResourcePath,
     repository: Annotated[ProviderRepository, Depends(get_repository)],
 ) -> StoredProvider:
     return await repository.get_provider(provider_id)
@@ -129,7 +132,7 @@ async def provider(
 
 @router.get("/providers/{provider_id}/dashboard", response_model=ProviderDashboard)
 async def provider_dashboard(
-    provider_id: UUID,
+    provider_id: ResourcePath,
     repository: Annotated[ProviderRepository, Depends(get_repository)],
     as_of_date: Annotated[date, Depends(get_monitoring_date)],
 ) -> ProviderDashboard:
@@ -146,7 +149,7 @@ async def index() -> str:
     "/providers/{provider_id}/checklist-edits", response_model=list[ChecklistEdit]
 )
 async def checklist_history(
-    provider_id: UUID, pool: Annotated[DatabasePool, Depends(get_pool)]
+    provider_id: ResourcePath, pool: Annotated[DatabasePool, Depends(get_pool)]
 ) -> list[ChecklistEdit]:
     return await ChecklistRepository(pool).list_for_provider(provider_id)
 
@@ -157,8 +160,8 @@ async def checklist_history(
     status_code=201,
 )
 async def save_checklist_edit(
-    provider_id: UUID,
-    requirement_id: UUID,
+    provider_id: ResourcePath,
+    requirement_id: ResourcePath,
     request: ChecklistEditRequest,
     pool: Annotated[DatabasePool, Depends(get_pool)],
     role: Annotated[DemoRole, Header(alias="X-Demo-Role")] = "proposer",
@@ -184,22 +187,20 @@ async def analyze_update(
         code = {"configuration": 503, "timeout": 504, "model": 502}[
             saved.failure_category
         ]
-        raise HTTPException(
-            code, {"message": saved.message, "update_id": str(saved.id)}
-        )
+        raise HTTPException(code, {"message": saved.message, "update_id": saved.id})
     return saved
 
 
 @router.get("/updates/{update_id}", response_model=SavedUpdate)
 async def saved_update(
-    update_id: UUID, pool: Annotated[DatabasePool, Depends(get_pool)]
+    update_id: ResourcePath, pool: Annotated[DatabasePool, Depends(get_pool)]
 ) -> SavedUpdate:
     return await UpdateRepository(pool).get(update_id)
 
 
 @router.get("/providers/{provider_id}/updates", response_model=list[SavedUpdate])
 async def saved_updates(
-    provider_id: UUID, pool: Annotated[DatabasePool, Depends(get_pool)]
+    provider_id: ResourcePath, pool: Annotated[DatabasePool, Depends(get_pool)]
 ) -> list[SavedUpdate]:
     return await UpdateRepository(pool).list_for_provider(provider_id)
 
@@ -215,7 +216,7 @@ async def update_conflict(_request: Request, _error: Exception) -> JSONResponse:
 
 @router.post("/suggestions/{suggestion_id}/review", response_model=ReviewDecision)
 async def record_review(
-    suggestion_id: UUID,
+    suggestion_id: ResourcePath,
     request: ReviewRequest,
     pool: Annotated[DatabasePool, Depends(get_pool)],
     role: Annotated[DemoRole, Header(alias="X-Demo-Role")] = "proposer",
@@ -254,6 +255,7 @@ def create_app() -> FastAPI:
     application.add_exception_handler(ChecklistEditForbidden, review_forbidden)
     application.add_exception_handler(ChecklistEditConflict, review_conflict)
     application.add_exception_handler(ChecklistEditInvalid, review_invalid)
+    application.add_exception_handler(ProviderArchivedConflict, review_conflict)
     return application
 
 

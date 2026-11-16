@@ -14,15 +14,15 @@ from tests.e2e.test_review_workflow import drug_card, drug_row, open_history, pr
 def monitoring_records(seeded_provider):
     with psycopg.connect(configured_test_url()) as conn:
         conn.execute(
-            "UPDATE requirements SET deadline='2026-11-10' WHERE provider_id=%s AND name='Offer letter'",
+            "UPDATE requirements SET deadline='2026-11-10' WHERE provider_id=%s AND requirement_definition_id IN (SELECT id FROM requirement_definitions WHERE name='Offer letter')",
             (seeded_provider.id,),
         )
         conn.execute(
-            "UPDATE requirements SET deadline='2026-11-18' WHERE provider_id=%s AND name='Drug screening'",
+            "UPDATE requirements SET deadline='2026-11-18' WHERE provider_id=%s AND requirement_definition_id IN (SELECT id FROM requirement_definitions WHERE name='Drug screening')",
             (seeded_provider.id,),
         )
         conn.execute(
-            "UPDATE requirements SET status='Incomplete',deadline='2026-11-10' WHERE provider_id=%s AND name='Insurance credentialing'",
+            "UPDATE requirements SET status='Incomplete',deadline='2026-11-10' WHERE provider_id=%s AND requirement_definition_id IN (SELECT id FROM requirement_definitions WHERE name='Insurance credentialing')",
             (seeded_provider.id,),
         )
 
@@ -30,7 +30,7 @@ def monitoring_records(seeded_provider):
 def set_drug(provider, status, deadline):
     with psycopg.connect(configured_test_url()) as conn:
         conn.execute(
-            "UPDATE requirements SET status=%s,deadline=%s WHERE provider_id=%s AND name='Drug screening'",
+            "UPDATE requirements SET status=%s,deadline=%s WHERE provider_id=%s AND requirement_definition_id IN (SELECT id FROM requirement_definitions WHERE name='Drug screening')",
             (status, deadline, provider.id),
         )
 
@@ -67,15 +67,25 @@ def indicator(page, name="Drug screening"):
     ],
 )
 def test_monitoring_acceptance_cases(
-    page, app_server, seeded_provider, name, status, deadline, label, finished, remaining
+    page,
+    app_server,
+    seeded_provider,
+    name,
+    status,
+    deadline,
+    label,
+    finished,
+    remaining,
 ):
     with psycopg.connect(configured_test_url()) as conn:
         conn.execute(
-            "UPDATE requirements SET status=%s,deadline=%s WHERE provider_id=%s AND name=%s",
+            "UPDATE requirements SET status=%s,deadline=%s WHERE provider_id=%s AND requirement_definition_id IN (SELECT id FROM requirement_definitions WHERE name=%s)",
             (status, deadline, seeded_provider.id, name),
         )
     page.goto(app_server.url)
-    expect(page.get_by_role("columnheader", name="Monitoring", exact=True)).to_be_visible()
+    expect(
+        page.get_by_role("columnheader", name="Monitoring", exact=True)
+    ).to_be_visible()
     expect(indicator(page, name)).to_have_text(label)
     counts(page, finished, remaining)
 
@@ -111,7 +121,9 @@ def test_monitoring_approval_reversal_and_restart(page, app_server, seeded_provi
     counts(page, overdue=2)
 
 
-def test_unknown_past_status_is_visible_and_text_safe(page, app_server, seeded_provider):
+def test_unknown_past_status_is_visible_and_text_safe(
+    page, app_server, seeded_provider
+):
     raw = "<script>window.injected = true</script>"
     set_drug(seeded_provider, raw, "2026-11-10")
     page.goto(app_server.url)
@@ -138,7 +150,9 @@ def test_due_today_and_date_label_use_server_day(
     set_drug(seeded_provider, "Scheduled", deadline)
     page.goto(app_server.url)
     expect(indicator(page)).to_have_text(label)
-    expect(page.get_by_text("As of 2026-11-11 · Hawaii (Pacific/Honolulu)", exact=True)).to_be_visible()
+    expect(
+        page.get_by_text("As of 2026-11-11 · Hawaii (Pacific/Honolulu)", exact=True)
+    ).to_be_visible()
     counts(page)
 
 
@@ -146,10 +160,16 @@ def test_empty_checklist_has_zero_counts_without_readiness_claim(
     page, app_server, seeded_provider
 ):
     with psycopg.connect(configured_test_url()) as conn:
-        conn.execute("DELETE FROM requirements WHERE provider_id=%s", (seeded_provider.id,))
+        conn.execute(
+            "DELETE FROM requirements WHERE provider_id=%s", (seeded_provider.id,)
+        )
     page.goto(app_server.url)
     counts(page, 0, 0, 0, 0)
-    expect(page.get_by_text("No checklist requirements are saved for this provider.", exact=True)).to_be_visible()
+    expect(
+        page.get_by_text(
+            "No checklist requirements are saved for this provider.", exact=True
+        )
+    ).to_be_visible()
     expect(page.get_by_text("Ready to start", exact=False)).to_have_count(0)
 
 
@@ -165,7 +185,9 @@ def test_saved_review_with_failed_dashboard_refresh_is_reported_honestly(
 
     page.route("**/providers/*/dashboard", fail_refresh)
     drug_card(page).get_by_role("button", name="Approve", exact=True).click()
-    expect(page.locator("#request-status")).to_contain_text("Decision saved, but the view could not refresh")
+    expect(page.locator("#request-status")).to_contain_text(
+        "Decision saved, but the view could not refresh"
+    )
     expect(drug_row(page)).to_contain_text("Scheduled")
     expect(indicator(page)).to_have_text("Outstanding")
     counts(page)
@@ -186,14 +208,22 @@ def test_failed_dashboard_load_clears_every_part_of_snapshot(page, app_server):
     page.route("**/providers/*/dashboard", fail_refresh)
     page.get_by_role("button", name="Refresh data", exact=True).click()
     expect(page.locator("#request-status")).to_contain_text("unavailable")
-    expect(page.get_by_role("region", name="Monitoring summary", exact=True)).to_be_hidden()
+    expect(
+        page.get_by_role("region", name="Monitoring summary", exact=True)
+    ).to_be_hidden()
     expect(page.locator("#requirements")).to_be_empty()
     expect(page.locator("#provider-description")).to_be_empty()
-    expect(page.get_by_role("button", name="Analyze update", exact=True)).to_be_disabled()
+    expect(
+        page.get_by_role("button", name="Analyze update", exact=True)
+    ).to_be_disabled()
     page.reload()
     expect(page.locator("#request-status")).to_contain_text("unavailable")
-    expect(page.get_by_role("region", name="Monitoring summary", exact=True)).to_be_hidden()
-    expect(page.get_by_role("button", name="Analyze update", exact=True)).to_be_disabled()
+    expect(
+        page.get_by_role("region", name="Monitoring summary", exact=True)
+    ).to_be_hidden()
+    expect(
+        page.get_by_role("button", name="Analyze update", exact=True)
+    ).to_be_disabled()
 
 
 def test_monitoring_refresh_uses_new_server_date(page, app_server):
@@ -202,7 +232,9 @@ def test_monitoring_refresh_uses_new_server_date(page, app_server):
     app_server.as_of = date(2026, 11, 19)
     app_server.restart()
     page.get_by_role("button", name="Refresh data", exact=True).click()
-    expect(page.get_by_text("As of 2026-11-19 · Hawaii (Pacific/Honolulu)", exact=True)).to_be_visible()
+    expect(
+        page.get_by_text("As of 2026-11-19 · Hawaii (Pacific/Honolulu)", exact=True)
+    ).to_be_visible()
     expect(indicator(page)).to_have_text("Overdue")
     counts(page, overdue=2)
 

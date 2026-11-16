@@ -6,20 +6,25 @@ This document records the reviewed PostgreSQL data model for the synthetic
 provider-onboarding prototype. It is a design reference, not an implementation
 plan or executable SQL. Keep `docs/proposal.md` unchanged.
 
-The proposed target contains **twelve tables**. The current implementation has
-**eight application tables**, described by [the generated schema](../db/schema.sql)
-and [the applied migration definitions](../db/migrations/). The current schema uses
-UUID primary keys, individual requirement templates, and JSON analysis snapshots.
-It already has explicit foreign-key deletion policies. Integer identity keys,
-whole-checklist versions, normalized snapshot/warning tables, and archive/restore
-controls below describe the target; their presence in this document does not mean
-they exist in the application or authorize their implementation.
+The implemented relational model contains **twelve application tables**, described
+by [the generated schema](../db/schema.sql) and
+[the migration definitions](../db/migrations/). The first three migrations describe
+the former eight-table UUID/JSON schema; the fourth performs the coordinated
+integer-ID conversion, complete-checklist versioning, and normalized snapshots and
+warnings. Existing app workflows use that schema. The migration is not applied
+automatically; follow [the cutover runbook](database-cutover.md) for an existing
+database and obtain explicit authorization before changing Neon.
+
+The `archived_at` field, active/archived viewing, and archived write guards are
+implemented. Archive/Restore/Delete action endpoints and buttons remain future
+work, as does managed sign-in. The lifecycle rules below describe their agreed
+behavior; documentation does not imply that those controls are available.
 
 Use synthetic provider records and administrative updates only. Preserve original
 messages, proposed changes, supporting evidence, and independent Manager decisions.
 Keep authorization and workflow rules in Python, request/model validation in
 Pydantic, and relational integrity in PostgreSQL. Use raw SQL and dbmate for schema
-changes. No ORM, migration code, or application changes are introduced here.
+changes. No ORM is used; this document describes the model rather than defining executable SQL.
 
 ## Design choices
 
@@ -77,8 +82,8 @@ no `retired_at` column is included in this target model.
 
 ## Entity relationship diagram
 
-This diagram shows the proposed model, not the current eight-table schema.
-Composite ownership constraints are specified separately below.
+This diagram shows the implemented relational model. Composite ownership
+constraints are specified separately below.
 
 ```mermaid
 erDiagram
@@ -425,6 +430,10 @@ The unique suggestion key covers `review_decisions.suggestion_id`.
 
 ## Archive, restoration, and permanent deletion
 
+Archive/Restore/Delete action controls are deferred. Current views and server
+operations already respect stored archive state, and provider-owned SQL cascades
+are tested. The following rules govern the future action interface.
+
 - Only Manager mode can archive, restore, or permanently delete a provider.
   The role remains simulated until future managed sign-in is introduced.
 - Archiving sets `archived_at`, removes the provider from active onboarding, and
@@ -504,12 +513,13 @@ forwarded-email processing, automated reminders, policy retrieval/RAG, model
 routing, stored completion flags, or stored dashboard counts. Completion and
 Hawaii-date deadline monitoring stay derived from saved statuses and deadlines.
 
-The exact forward migration, existing-data transformation, API changes, transaction
-locking, template-configuration tooling, and race handling are future implementation
-work. They must preserve the invariants above, including complete captured context,
-archive view-only behavior, retry safety, immutable historical references, and
-provider-scoped deletion. This document provides no implementation sequence and
-does not authorize those changes.
+The forward migration, data transformation, integer API contracts, captured-state
+queries, programmatic template configuration, and lifecycle race guards are
+implemented for existing workflows. Their local cutover/backup rehearsal and
+operational gates are described in `docs/database-cutover.md`. These preserve
+complete captured context, retry safety, immutable historical references, and
+provider-scoped deletion. Live migration and future action controls remain
+separate release decisions.
 
 ## Required migration review before execution
 

@@ -6,8 +6,8 @@ import psycopg
 import pytest
 from playwright.sync_api import expect
 
-from app.seed import DENTIST_ID
 from tests.database import configured_test_url
+from tests.fixtures.current_database import provider_type_id
 from tests.test_checklist_edits import edit_body, endpoint
 
 MANAGER = {"X-Demo-Role": "manager"}
@@ -68,9 +68,9 @@ def second_provider(page, server):
         server.url + "/providers",
         headers=MANAGER,
         data={
-            "id": str(uuid4()),
+            "creation_request_id": str(uuid4()),
             "name": "Another Fictional Provider",
-            "provider_type_id": str(DENTIST_ID),
+            "provider_type_id": provider_type_id(),
         },
     )
     assert response.status == 201
@@ -105,7 +105,7 @@ def test_disclosure_defaults_pending_counts_and_provider_switch(
     assert history(page).evaluate("e => e.open")
     other = second_provider(page, app_server)
     page.get_by_role("button", name="Refresh data", exact=True).click()
-    page.get_by_label("Provider", exact=True).select_option(other["id"])
+    page.get_by_label("Provider", exact=True).select_option(str(other["id"]))
     expect(row(page)).to_contain_text("Outstanding")
     assert not history(page).evaluate("e => e.open")
     page.get_by_label("Provider", exact=True).select_option(str(seeded_provider.id))
@@ -215,7 +215,7 @@ def test_lost_save_response_freezes_identity_across_role_and_provider_switch(
         page.reload()
         expect(page.get_by_label("Simulated role", exact=True)).to_be_enabled()
     page.get_by_label("Simulated role", exact=True).select_option("proposer")
-    page.get_by_label("Provider", exact=True).select_option(other["id"])
+    page.get_by_label("Provider", exact=True).select_option(str(other["id"]))
     expect(
         page.get_by_role("button", name="Retry checklist save", exact=True)
     ).to_be_hidden()
@@ -323,7 +323,7 @@ def test_unfamiliar_current_and_proposed_values_are_safe_dropdown_options(
     raw = '<img src=x onerror="window.checklistInjected=true">'
     with psycopg.connect(configured_test_url()) as conn:
         conn.execute(
-            "UPDATE requirements SET status=%s WHERE provider_id=%s AND name='Drug screening'",
+            "UPDATE requirements SET status=%s WHERE provider_id=%s AND requirement_definition_id IN (SELECT id FROM requirement_definitions WHERE name='Drug screening')",
             (raw, seeded_provider.id),
         )
     group = open_editor(page, app_server)
@@ -394,7 +394,7 @@ def test_review_saves_verbatim_status_options(
     if preserved_source == "saved":
         with psycopg.connect(configured_test_url()) as conn:
             conn.execute(
-                "UPDATE requirements SET status=%s WHERE provider_id=%s AND name='Drug screening'",
+                "UPDATE requirements SET status=%s WHERE provider_id=%s AND requirement_definition_id IN (SELECT id FROM requirement_definitions WHERE name='Drug screening')",
                 (saved_status, seeded_provider.id),
             )
     load(page, app_server)
