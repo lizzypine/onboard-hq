@@ -1,6 +1,7 @@
 """Real browser creation, provider isolation, and recovery with TestModel only."""
 
 from urllib.parse import urlsplit
+from uuid import uuid4
 
 import psycopg
 import pytest
@@ -342,3 +343,96 @@ def test_creation_form_keyboard_and_narrow_layout(page, app_server, tmp_path):
             break
     expect(save).to_be_focused()
     form.screenshot(path=tmp_path / "provider-form-narrow.png")
+
+
+@pytest.mark.parametrize("populated", [False, True])
+def test_creation_from_archived_view_selects_the_new_active_provider(
+    page, app_server, seeded_provider, populated
+):
+    if populated:
+        with psycopg.connect(configured_test_url()) as conn:
+            conn.execute(
+                "UPDATE providers SET archived_at=now() WHERE id=%s",
+                (seeded_provider.id,),
+            )
+    page.goto(app_server.url)
+    expect(page.get_by_label("Simulated role", exact=True)).to_be_enabled()
+    page.locator("#provider-state").select_option("archived")
+    if populated:
+        expect(page.locator("#requirements")).to_contain_text("Drug screening")
+    else:
+        expect(page.locator("#requirements")).to_be_empty()
+    page.get_by_label("Simulated role", exact=True).select_option("manager")
+    page.get_by_role("button", name="Add provider", exact=True).click()
+    form = page.locator("#provider-form")
+    fill_form(form, "New active provider from Archived", "")
+    created = save_form(page, app_server, form)
+    expect(page.locator("#provider-state")).to_have_value("active")
+    expect(page.get_by_label("Provider", exact=True)).to_have_value(str(created["id"]))
+    assert created["archived_at"] is None
+    assert_new_counts(page)
+
+
+def test_provider_view_transitions_clear_update_text_before_selecting_another_person(
+    page, app_server, seeded_provider
+):
+    kind = page.request.get(app_server.url + "/provider-types").json()[0]["id"]
+
+    def create(name):
+        response = page.request.post(
+            app_server.url + "/providers",
+            headers={"X-Demo-Role": "manager"},
+            data={
+                "creation_request_id": str(uuid4()),
+                "name": name,
+                "provider_type_id": kind,
+            },
+        )
+        assert response.status == 201
+        return response.json()
+
+    other = create("ZZ Active Example")
+    archived = create("Archived Example")
+    with psycopg.connect(configured_test_url()) as conn:
+        conn.execute(
+            "UPDATE providers SET archived_at=now() WHERE id=%s", (archived["id"],)
+        )
+    page.goto(app_server.url)
+    expect(page.get_by_label("Simulated role", exact=True)).to_be_enabled()
+    page.get_by_label("Provider", exact=True).select_option(str(other["id"]))
+    expect(page.get_by_label("Provider", exact=True)).to_have_value(str(other["id"]))
+    page.get_by_label("Original update", exact=True).fill(
+        "Drug screening completed for ZZ Active Example."
+    )
+    page.locator("#provider-state").select_option("archived")
+    expect(page.get_by_label("Provider", exact=True)).to_have_value(str(archived["id"]))
+    expect(page.get_by_label("Original update", exact=True)).to_have_value("")
+    page.get_by_label("Original update", exact=True).fill(
+        "An unsent archived-provider draft."
+    )
+    page.locator("#provider-state").select_option("active")
+    expect(page.get_by_label("Provider", exact=True)).to_have_value(
+        str(seeded_provider.id)
+    )
+    expect(page.get_by_label("Original update", exact=True)).to_have_value("")
+    for identity in [seeded_provider.id, other["id"], archived["id"]]:
+        assert (
+            page.request.get(app_server.url + f"/providers/{identity}/updates").json()
+            == []
+        )
+
+
+def test_provider_view_cannot_change_while_analysis_is_in_flight(page, app_server):
+    page.goto(app_server.url)
+    analyze = page.get_by_role("button", name="Analyze update", exact=True)
+    expect(analyze).to_be_enabled()
+    held = []
+    page.route("**/updates/analyze", lambda route: held.append(route))
+    page.get_by_label("Original update", exact=True).fill("Drug screening completed.")
+    with page.expect_request("**/updates/analyze"):
+        analyze.click()
+    try:
+        expect(page.locator("#provider-state")).to_be_disabled()
+    finally:
+        for route in held:
+            route.continue_()
