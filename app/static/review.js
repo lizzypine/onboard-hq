@@ -1,6 +1,7 @@
 "use strict";
 
 import {statusSelect} from "./statuses.js";
+import {addDateHelp} from "./date-help.js?v=3";
 
 function text(parent, tag, value, className = "") {
   const element = document.createElement(tag);
@@ -61,8 +62,10 @@ export function renderReviewControls(card, suggestion, current, {busy, onDecide,
   const table = text(scroll, "table", "", "review-table");
   table.setAttribute("aria-label", "Review " + suggestion.requirement);
   const header = text(text(table, "thead", ""), "tr", "");
-  for (const label of ["Requirement", "Status", "Requirement date", "Deadline"]) {
-    text(header, "th", label).scope = "col";
+  for (const label of ["Requirement", "Status", "Expected completion date", "Deadline"]) {
+    const heading = text(header, "th", label);
+    heading.scope = "col";
+    if (label === "Expected completion date") addDateHelp(heading);
   }
   const row = text(text(table, "tbody", ""), "tr", "");
   text(row, "td", suggestion.requirement);

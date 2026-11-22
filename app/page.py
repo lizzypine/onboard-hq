@@ -30,6 +30,15 @@ PAGE = """<!doctype html>
     button.primary { color: white; background: #205f79; border-color: #205f79; }
     button:disabled { cursor: default; opacity: .6; }
     :focus-visible { outline: 3px solid #3088ac; outline-offset: 3px; }
+    .date-help { display: inline-flex; align-items: center; justify-content: center;
+      width: 21px; height: 21px; padding: 0; border-radius: 50%; font-size: 12px;
+      background: white; color: #205f79; vertical-align: middle; flex: none; }
+    .date-field-heading { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .date-field-heading label { margin: 0; }
+    .date-explanation { position: fixed; inset: auto; margin: 0; padding: 14px;
+      width: min(300px, calc(100vw - 24px)); border: 1px solid #8da9b6;
+      border-radius: 8px; background: white; color: #172b3a; font-size: 14px;
+      line-height: 1.5; box-shadow: 0 5px 24px #172b3a33; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
     .table-scroll { max-width: 100%; overflow-x: auto; }
     table { border-collapse: collapse; width: 100%; min-width: 540px; }
@@ -104,7 +113,7 @@ PAGE = """<!doctype html>
       .monitoring-counts { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
-  <script src="/static/onboarding.js?v=2" type="module"></script>
+  <script src="/static/onboarding.js?v=3" type="module"></script>
 </head>
 <body>
 <main>
@@ -143,7 +152,7 @@ PAGE = """<!doctype html>
         <p id="provider-template-count" class="notice"></p>
         <div id="provider-preview" class="table-scroll" tabindex="0" role="region" aria-label="Scrollable provider checklist preview" hidden>
           <table aria-label="New provider checklist preview">
-            <thead><tr><th scope="col">Requirement</th><th scope="col">Status</th><th scope="col">Requirement date</th><th scope="col">Deadline</th></tr></thead>
+            <thead><tr><th scope="col">Requirement</th><th scope="col">Status</th><th scope="col" data-date-help>Expected completion date</th><th scope="col">Deadline</th></tr></thead>
             <tbody id="provider-preview-rows"></tbody>
           </table>
         </div>
@@ -170,7 +179,7 @@ PAGE = """<!doctype html>
     <div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable checklist">
       <table aria-label="Onboarding checklist">
         <thead><tr><th scope="col">Requirement</th><th scope="col">Status</th>
-          <th scope="col">Requirement date</th><th scope="col">Deadline</th>
+          <th scope="col" data-date-help>Expected completion date</th><th scope="col">Deadline</th>
           <th scope="col">Monitoring</th><th scope="col" id="checklist-action-heading" hidden>Action</th></tr></thead>
         <tbody id="requirements"></tbody>
       </table>

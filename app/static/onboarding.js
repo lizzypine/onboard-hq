@@ -1,8 +1,11 @@
 "use strict";
 
-import {renderReviewControls} from "./review.js?v=2";
-import {providerLabel, setupProviderCreation} from "./providers.js?v=2";
-import {setupChecklist} from "./checklist.js?v=2";
+import {renderReviewControls} from "./review.js?v=3";
+import {providerLabel, setupProviderCreation} from "./providers.js?v=3";
+import {setupChecklist} from "./checklist.js?v=3";
+import {setupDateHelp} from "./date-help.js?v=3";
+
+setupDateHelp();
 
 const providerSelect = document.getElementById("provider");
 const roleSelect = document.getElementById("demo-role");
@@ -153,7 +156,7 @@ function renderManualEdit(edit) {
   card.setAttribute("aria-label", "Manager checklist edit: " + edit.requirement_name);
   text(card, "h3", "Manager checklist edit");
   text(card, "p", edit.requirement_name);
-  for (const [label, field] of [["Status", "status"], ["Requirement date", "scheduled_date"], ["Deadline", "deadline"]]) {
+  for (const [label, field] of [["Status", "status"], ["Expected completion date", "scheduled_date"], ["Deadline", "deadline"]]) {
     if (edit["previous_" + field] !== edit["applied_" + field]) text(card, "p", label + ": " + (edit["previous_" + field] || "Not set") + " → " + (edit["applied_" + field] || "Not set"));
   }
   text(card, "p", "Saved by simulated Manager: " + new Date(edit.created_at).toLocaleString());

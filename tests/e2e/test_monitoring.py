@@ -252,5 +252,11 @@ def test_monitoring_layout_and_keyboard_access(page, app_server):
     expect(scroll).to_be_focused()
     page.keyboard.press("End")
     page.keyboard.press("Tab")
+    expect(
+        page.get_by_role("button", name="About expected completion date").first
+    ).to_be_focused()
+    expect(page.get_by_role("tooltip")).to_be_visible()
+    page.keyboard.press("Escape")
+    page.keyboard.press("Tab")
     expect(page.get_by_label("Original update", exact=True)).to_be_focused()
     page.screenshot(path=directory / "monitoring-narrow.png", full_page=True)
