@@ -11,19 +11,19 @@ from fastapi.testclient import TestClient
 from app import main
 from app.database import DatabaseUnavailable, create_pool
 from app.provider_models import CreateProviderRequest
-from app.repository import providers as provider_repository
 from app.repository.providers import ProviderRepository
-from app.seed import DENTIST_ID, INITIAL_STATUSES
+from app.seed import INITIAL_STATUSES
 from tests.database import configured_test_url, disposable_database
+from tests.fixtures.current_database import configure_catalog, provider_type_id
 
 MANAGER = {"X-Demo-Role": "manager"}
 
 
 def body(**changes):
     return {
-        "id": str(uuid4()),
+        "creation_request_id": str(uuid4()),
         "name": "Dr. Avery Example",
-        "provider_type_id": str(DENTIST_ID),
+        "provider_type_id": changes.get("provider_type_id") or provider_type_id(),
         "proposed_start_date": "2027-01-15",
         **changes,
     }
@@ -55,7 +55,9 @@ def test_catalog_and_creation_copy_the_selected_template(client, seeded_provider
     assert catalog.status_code == 200
     assert catalog.json() == [
         {
-            "id": str(DENTIST_ID),
+            "id": provider_type_id(),
+            "checklist_template_id": seeded_provider.checklist_template_id,
+            "template_version": 1,
             "name": "Dentist",
             "requirements": sorted(INITIAL_STATUSES),
         }
@@ -70,7 +72,7 @@ def test_catalog_and_creation_copy_the_selected_template(client, seeded_provider
         and r["scheduled_date"] is None
         and r["deadline"] is None
         and r["version"] == 0
-        and r["source_template_id"]
+        and r["requirement_definition_id"]
         for r in result["requirements"]
     )
     assert len({r["id"] for r in result["requirements"]}) == 5
@@ -99,7 +101,7 @@ def test_creation_rejects_unprivileged_roles_without_writes(client, headers):
     "changes",
     [
         {"name": " "},
-        {"id": "bad"},
+        {"creation_request_id": "bad"},
         {"provider_type_id": "bad"},
         {"proposed_start_date": "2026-02-30"},
         {"requirements": []},
@@ -116,45 +118,35 @@ def test_creation_input_errors_make_no_records(client, changes):
 
 
 def test_missing_and_empty_types_do_not_create_partial_providers(client):
-    empty_id = uuid4()
     with psycopg.connect(configured_test_url()) as conn:
-        conn.execute(
-            "INSERT INTO provider_types VALUES (%s,'Synthetic Empty')", (empty_id,)
-        )
+        empty_id = conn.execute(
+            "INSERT INTO provider_types(name) VALUES ('Synthetic Empty') RETURNING id"
+        ).fetchone()[0]
     before = counts()
     assert (
         client.post(
-            "/providers", json=body(provider_type_id=str(uuid4())), headers=MANAGER
+            "/providers", json=body(provider_type_id=999999999), headers=MANAGER
         ).status_code
         == 404
     )
     assert (
         client.post(
-            "/providers", json=body(provider_type_id=str(empty_id)), headers=MANAGER
+            "/providers", json=body(provider_type_id=empty_id), headers=MANAGER
         ).status_code
         == 409
     )
-    assert all(t["id"] != str(empty_id) for t in client.get("/provider-types").json())
+    assert all(t["id"] != empty_id for t in client.get("/provider-types").json())
     assert counts() == before
 
 
 def test_other_synthetic_type_copies_only_its_own_requirements(client):
-    type_id, template_id = uuid4(), uuid4()
-    with psycopg.connect(configured_test_url()) as conn:
-        conn.execute(
-            "INSERT INTO provider_types VALUES (%s,'Synthetic Other')", (type_id,)
-        )
-        conn.execute(
-            "INSERT INTO requirement_templates VALUES (%s,%s,'Synthetic requirement')",
-            (template_id, type_id),
-        )
-    result = create(
-        client, body(provider_type_id=str(type_id), proposed_start_date=None)
-    )
+    template = configure_catalog("Synthetic Other", ["Synthetic requirement"])
+    type_id, template_id = template.id, template.checklist_template_id
+    result = create(client, body(provider_type_id=type_id, proposed_start_date=None))
     assert result["proposed_start_date"] is None
     assert len(result["requirements"]) == 1
     assert result["requirements"][0]["name"] == "Synthetic requirement"
-    assert result["requirements"][0]["source_template_id"] == str(template_id)
+    assert result["requirements"][0]["checklist_template_id"] == template_id
     assert (
         client.get(f"/providers/{result['id']}/dashboard").json()["monitoring"][
             "counts"
@@ -176,7 +168,7 @@ def test_identical_and_concurrent_retries_create_once(client):
     "changes",
     [
         {"name": "Different Example"},
-        {"provider_type_id": str(uuid4())},
+        {"provider_type_id": 999999999},
         {"proposed_start_date": None},
     ],
 )
@@ -227,15 +219,15 @@ def test_creation_retry_preserves_approved_progress_and_template_snapshot(
         == 200
     )
     saved = client.get(f"/providers/{original['id']}").json()
-    with psycopg.connect(configured_test_url()) as conn:
-        conn.execute(
-            "INSERT INTO requirement_templates VALUES (%s,%s,'Later synthetic requirement')",
-            (uuid4(), DENTIST_ID),
-        )
-        conn.execute(
-            "UPDATE requirement_templates SET name='Renamed template' WHERE provider_type_id=%s AND name='Offer letter'",
-            (DENTIST_ID,),
-        )
+    configure_catalog(
+        "Dentist",
+        [
+            "Renamed template" if name == "Offer letter" else name
+            for name in INITIAL_STATUSES
+        ]
+        + ["Later synthetic requirement"],
+        version=2,
+    )
     assert create(client, payload) == saved
     newer = create(client)
     assert len(newer["requirements"]) == 6
@@ -263,8 +255,14 @@ def test_creation_retry_preserves_approved_progress_and_template_snapshot(
 def test_creation_rolls_back_after_a_partial_checklist_insert(
     db_url, seeded_provider, monkeypatch
 ):
-    collision = uuid4()
-    monkeypatch.setattr(provider_repository, "uuid5", lambda *_: collision)
+    with psycopg.connect(db_url) as conn:
+        conn.execute(
+            "CREATE FUNCTION test_reject_requirement() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF (SELECT count(*) FROM requirements WHERE provider_id=NEW.provider_id)>0 THEN RAISE EXCEPTION 'controlled insert failure'; END IF; RETURN NEW; END $$"
+        )
+        conn.execute(
+            "CREATE TRIGGER test_reject_requirement BEFORE INSERT ON requirements FOR EACH ROW EXECUTE FUNCTION test_reject_requirement()"
+        )
+
     request = CreateProviderRequest.model_validate(body())
 
     async def attempt():
@@ -275,8 +273,13 @@ def test_creation_rolls_back_after_a_partial_checklist_insert(
                 )
 
     before = counts()
-    asyncio.run(attempt())
-    assert counts() == before
+    try:
+        asyncio.run(attempt())
+        assert counts() == before
+    finally:
+        with psycopg.connect(db_url) as conn:
+            conn.execute("DROP TRIGGER test_reject_requirement ON requirements")
+            conn.execute("DROP FUNCTION test_reject_requirement()")
 
 
 @pytest.mark.parametrize("path", ["/provider-types", "/providers"])
@@ -286,7 +289,9 @@ def test_creation_endpoints_report_missing_configuration_safely(monkeypatch, pat
         result = (
             test_client.get(path)
             if path == "/provider-types"
-            else test_client.post(path, json=body(), headers=MANAGER)
+            else test_client.post(
+                path, json=body(provider_type_id=999999999), headers=MANAGER
+            )
         )
     assert result.status_code == 503
     assert "postgresql://" not in result.text
@@ -296,7 +301,9 @@ def test_creation_reports_missing_schema_safely(monkeypatch):
     with disposable_database() as url:
         monkeypatch.setenv("DATABASE_URL", url)
         with TestClient(main.create_app()) as test_client:
-            result = test_client.post("/providers", json=body(), headers=MANAGER)
+            result = test_client.post(
+                "/providers", json=body(provider_type_id=999999999), headers=MANAGER
+            )
             assert result.status_code == 503
             assert "postgresql://" not in result.text
             assert "UndefinedTable" not in result.text

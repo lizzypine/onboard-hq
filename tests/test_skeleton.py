@@ -21,7 +21,7 @@ def test_update_endpoint_returns_declared_top_level_fields(
     client: TestClient, seeded_provider
 ) -> None:
     request = {
-        "provider_id": str(seeded_provider.id),
+        "provider_id": seeded_provider.id,
         "request_id": str(uuid4()),
         "update_text": "Hawaii dental license received.",
     }
@@ -30,7 +30,7 @@ def test_update_endpoint_returns_declared_top_level_fields(
 
     assert response.status_code == 200
     saved = response.json()
-    assert saved["provider_id"] == str(seeded_provider.id)
+    assert saved["provider_id"] == seeded_provider.id
     assert saved["processing_state"] == "completed"
     assert saved["update_text"] == request["update_text"]
     assert client.get(f"/updates/{saved['id']}").json() == saved

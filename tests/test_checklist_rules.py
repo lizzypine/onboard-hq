@@ -19,7 +19,7 @@ from app.rules.statuses import classify_completion, status_choices, status_tone
 
 def payload(**changes):
     return dict(
-        id=uuid4(),
+        operation_id=uuid4(),
         expected_version=0,
         status="Outstanding",
         scheduled_date=None,
@@ -109,8 +109,10 @@ def test_badge_tone_cannot_invent_completion(name, status, tone, completion):
 
 def test_direct_edit_rules_enforce_role_version_real_change_and_status_scope():
     row = StoredRequirement(
-        id=uuid4(),
-        provider_id=uuid4(),
+        id=2,
+        provider_id=1,
+        checklist_template_id=3,
+        requirement_definition_id=4,
         name="Drug screening",
         status="Outstanding",
         version=0,
@@ -126,3 +128,26 @@ def test_direct_edit_rules_enforce_role_version_real_change_and_status_scope():
     with pytest.raises(ChecklistEditInvalid):
         require_edit(row, "Dentist", request.model_copy(update={"status": "Signed"}))
     require_edit(row, "Dentist", request.model_copy(update={"status": "Completed"}))
+
+
+@pytest.mark.parametrize(
+    "provider_type,requirement_name",
+    [
+        ("dentist", "drug screening"),
+        (" Dentist ", " DRUG SCREENING "),
+        ("DENTIST", "Drug screening"),
+    ],
+)
+def test_normalized_catalog_labels_keep_their_known_status_rules(
+    provider_type, requirement_name
+):
+    assert status_choices(provider_type, requirement_name) == [
+        "Outstanding",
+        "Pending",
+        "Scheduled",
+        "Incomplete",
+        "Completed",
+    ]
+    assert (
+        classify_completion(provider_type, requirement_name, "Completed") == "finished"
+    )

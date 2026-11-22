@@ -1,7 +1,5 @@
 """Role, version, status and retry identity rules for explicit Manager edits."""
 
-from uuid import UUID
-
 from app.checklist_models import ChecklistEdit, ChecklistEditRequest
 from app.models import DemoRole, StoredRequirement
 from app.rules.statuses import status_choices
@@ -45,12 +43,12 @@ def require_edit(
 
 def require_same_edit(
     existing: ChecklistEdit,
-    provider_id: UUID,
-    requirement_id: UUID,
+    provider_id: int,
+    requirement_id: int,
     request: ChecklistEditRequest,
 ) -> None:
     original = ChecklistEditRequest(
-        id=existing.id,
+        operation_id=existing.operation_id,
         expected_version=existing.expected_version,
         status=existing.applied_status,
         scheduled_date=existing.applied_scheduled_date,

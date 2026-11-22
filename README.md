@@ -45,7 +45,9 @@ Install PostgreSQL 18 tools (on macOS: `brew install postgresql@18`), then run
 `bash scripts/install-dbmate.sh` to install checksum-verified dbmate 2.38.1 in
 the ignored `.superpowers/bin` directory. Set `DATABASE_URL` to Neon's pooled
 connection and `DATABASE_URL_UNPOOLED` to its direct connection in `.env`.
-Run schema migrations explicitly, with PostgreSQL 18's tools on PATH:
+For an existing UUID-era database, follow the [cutover runbook](docs/database-cutover.md)
+before migrating. The final backup must follow the write freeze. Run schema
+migrations explicitly, with PostgreSQL 18's tools on PATH:
 
 ```sh
 npx dbmate --no-dump-schema -e DATABASE_URL_UNPOOLED migrate
@@ -57,8 +59,12 @@ command passes the connection URL to `pg_dump` as a process argument. The commit
 using the same migrations and PostgreSQL 18 tools. Regenerate it there after schema
 changes; keep Neon credentials in the environment only.
 
-The schema has eight application tables, including immutable manual checklist edit
-history. Apply the checked-in migrations before using the updated app. Seed the existing synthetic provider
+The schema has twelve application tables, with integer resource IDs, whole-checklist
+versions, normalized captured context/warnings, and immutable manual edit history.
+The UUID-to-integer change requires a coordinated maintenance-window cutover for an
+existing database; stop/drain the old application and verify a final backup before
+migration. SQL rollback refuses this ID conversion; recovery needs that backup and
+the matching old app. Do not run a mixture of old and new workers. Seed the existing synthetic provider
 explicitly with `uv run --env-file .env python -m db.seed`. Seeding again preserves
 existing checklist progress and does not add new template entries to an established
 checklist. Migrations and seeds never run at application startup.
@@ -66,6 +72,8 @@ checklist. Migrations and seeds never run at application startup.
 The migrations under `db/migrations/` create the tables. `db/queries.py` provides
 `fetch_provider`, the application's parameterized query for one provider and their
 linked checklist; `tests/test_queries.py` tests it against an isolated database.
+Resource IDs are database-generated positive integers. Creation, analysis, and
+manual-save retry identities remain UUIDs; they are separate from record IDs.
 The old `python -m app.seed` entry point remains compatible. After migrating and
 seeding the development database, verify its migration status:
 

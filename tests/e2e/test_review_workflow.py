@@ -5,9 +5,12 @@ from uuid import uuid4
 import psycopg
 import pytest
 from playwright.sync_api import expect
-from psycopg.types.json import Jsonb
 
+from app.database import create_pool
+from app.models import SubmitUpdateRequest
+from app.repository.updates import UpdateRepository
 from tests.database import configured_test_url, disposable_database
+from tests.fixtures.current_database import run_async
 
 
 def propose(page, app_server, text="Drug screening completed."):
@@ -136,7 +139,7 @@ def test_supporting_text_is_safe_and_page_fits_narrow_viewport(page, app_server)
 def test_status_correction_and_date_clearing_keep_deadline(page, app_server):
     with psycopg.connect(configured_test_url()) as conn:
         conn.execute(
-            "UPDATE requirements SET scheduled_date='2026-11-20',deadline='2026-11-30' WHERE name='Drug screening'"
+            "UPDATE requirements SET scheduled_date='2026-11-20',deadline='2026-11-30' WHERE requirement_definition_id IN (SELECT id FROM requirement_definitions WHERE name='Drug screening')"
         )
     propose(page, app_server)
     expect(drug_card(page)).to_be_visible()
@@ -170,7 +173,6 @@ def test_lost_analysis_response_reuses_request_without_creating_second_update(
         app_server.url + f"/providers/{seeded_provider.id}/updates"
     ).json()
     assert len(history) == 1
-
 
 
 @pytest.mark.parametrize("endpoint", ["updates", "dashboard"])
@@ -233,16 +235,17 @@ def test_stale_manager_view_refreshes_after_conflict_and_can_reject_old_proposal
 
 
 def test_unfinished_analysis_has_no_review_actions(page, app_server, seeded_provider):
-    with psycopg.connect(configured_test_url()) as conn:
-        conn.execute(
-            "INSERT INTO updates(id,request_id,provider_id,original_text,provider_snapshot,processing_state,message) VALUES (%s,%s,%s,'Interrupted synthetic update',%s,'processing','In progress')",
-            (
-                uuid4(),
-                uuid4(),
-                seeded_provider.id,
-                Jsonb(seeded_provider.model_dump(mode="json")),
-            ),
-        )
+    async def claim():
+        async with create_pool(configured_test_url()) as pool:
+            return await UpdateRepository(pool).claim(
+                SubmitUpdateRequest(
+                    provider_id=seeded_provider.id,
+                    request_id=uuid4(),
+                    update_text="Interrupted synthetic update",
+                )
+            )
+
+    run_async(claim)
     page.goto(app_server.url)
     open_history(page)
     expect(page.get_by_text("Analysis unfinished.", exact=False)).to_be_visible()

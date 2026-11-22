@@ -1,7 +1,6 @@
 """Hawaii clock boundary and coherent, read-only dashboard loading."""
 
 from datetime import UTC, date, datetime
-from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from app.checklist_models import RequirementEditOptions
@@ -22,7 +21,7 @@ def get_monitoring_date() -> date:
 
 
 async def get_dashboard(
-    repository: ProviderRepository, provider_id: UUID, *, as_of_date: date
+    repository: ProviderRepository, provider_id: int, *, as_of_date: date
 ) -> ProviderDashboard:
     provider = await repository.get_provider(provider_id)
     return ProviderDashboard(

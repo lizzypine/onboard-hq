@@ -13,7 +13,9 @@ from tests.e2e.test_review_workflow import drug_card, drug_row, propose
 def manager_review(page, app_server):
     propose(page, app_server)
     expect(drug_card(page)).to_be_visible()
-    expect(page.get_by_role("table", name="Review Drug screening", exact=True)).to_have_count(0)
+    expect(
+        page.get_by_role("table", name="Review Drug screening", exact=True)
+    ).to_have_count(0)
     page.get_by_label("Simulated role").select_option("manager")
     table = page.get_by_role("table", name="Review Drug screening", exact=True)
     expect(table).to_be_visible()
@@ -34,7 +36,7 @@ def changed(cell, value=True):
 def seed_date(provider, *, status="Scheduled"):
     with psycopg.connect(configured_test_url()) as conn:
         conn.execute(
-            "UPDATE requirements SET scheduled_date='2026-11-20',deadline='2026-11-30',status=%s WHERE provider_id=%s AND name='Drug screening'",
+            "UPDATE requirements SET scheduled_date='2026-11-20',deadline='2026-11-30',status=%s WHERE provider_id=%s AND requirement_definition_id IN (SELECT id FROM requirement_definitions WHERE name='Drug screening')",
             (status, provider.id),
         )
 
@@ -62,7 +64,9 @@ def test_review_row_highlights_proposed_status_and_keeps_evidence(
     expect(table.get_by_role("cell").first).to_have_text("Drug screening")
     expect(table.get_by_role("cell").last).to_have_text("Not set")
     expect(table.locator("input")).to_have_count(1)
-    expect(table.get_by_role("combobox", name="Reviewed status", exact=True)).to_be_visible()
+    expect(
+        table.get_by_role("combobox", name="Reviewed status", exact=True)
+    ).to_be_visible()
     expect(page.get_by_label("Date change", exact=True)).to_have_count(0)
     before = saved_dashboard(page, app_server, seeded_provider)
     table.get_by_label("Reviewed status", exact=True).select_option("Incomplete")
@@ -77,8 +81,12 @@ def test_return_to_saved_status_is_a_correction_without_highlight(page, app_serv
     table.get_by_label("Reviewed status", exact=True).select_option("Scheduled")
     changed(field_cell(table, "status"), False)
     expect(field_cell(table, "status")).to_contain_text("Unchanged")
-    expect(drug_card(page).get_by_role("button", name="Approve", exact=True)).to_be_disabled()
-    drug_card(page).get_by_role("button", name="Approve with corrections", exact=True).click()
+    expect(
+        drug_card(page).get_by_role("button", name="Approve", exact=True)
+    ).to_be_disabled()
+    drug_card(page).get_by_role(
+        "button", name="Approve with corrections", exact=True
+    ).click()
     expect(drug_card(page)).to_contain_text("Approved with corrections")
     expect(drug_card(page)).to_contain_text("Proposed status: Completed")
     expect(drug_card(page)).to_contain_text("Applied status: Scheduled")
@@ -135,14 +143,22 @@ def test_partial_date_cannot_be_mistaken_for_clear(page, app_server, seeded_prov
     date_input.press("Delete")
     assert date_input.evaluate("e => e.validity.badInput")
     expect(field_cell(table, "date")).to_contain_text("Enter a complete valid date.")
-    expect(drug_card(page).get_by_role("button", name="Approve", exact=True)).to_be_disabled()
-    expect(drug_card(page).get_by_role("button", name="Approve with corrections", exact=True)).to_be_disabled()
+    expect(
+        drug_card(page).get_by_role("button", name="Approve", exact=True)
+    ).to_be_disabled()
+    expect(
+        drug_card(page).get_by_role(
+            "button", name="Approve with corrections", exact=True
+        )
+    ).to_be_disabled()
     drug_card(page).get_by_role("button", name="Reject", exact=True).click()
     expect(drug_card(page)).to_contain_text("Rejected")
     expect(drug_row(page)).to_contain_text("2026-11-20")
 
 
-def test_clearing_inferred_date_resets_confirmation_and_can_be_rejected(page, app_server):
+def test_clearing_inferred_date_resets_confirmation_and_can_be_rejected(
+    page, app_server
+):
     app_server.restart("inferred")
     table = manager_review(page, app_server)
     changed(field_cell(table, "date"))
@@ -150,9 +166,17 @@ def test_clearing_inferred_date_resets_confirmation_and_can_be_rejected(page, ap
     confirm.check()
     table.get_by_label("Reviewed date", exact=True).fill("")
     expect(confirm).not_to_be_checked()
-    expect(field_cell(table, "date")).to_contain_text("A date is required for this inferred suggestion.")
-    expect(drug_card(page).get_by_role("button", name="Approve", exact=True)).to_be_disabled()
-    expect(drug_card(page).get_by_role("button", name="Approve with corrections", exact=True)).to_be_disabled()
+    expect(field_cell(table, "date")).to_contain_text(
+        "A date is required for this inferred suggestion."
+    )
+    expect(
+        drug_card(page).get_by_role("button", name="Approve", exact=True)
+    ).to_be_disabled()
+    expect(
+        drug_card(page).get_by_role(
+            "button", name="Approve with corrections", exact=True
+        )
+    ).to_be_disabled()
     drug_card(page).get_by_role("button", name="Reject", exact=True).click()
     expect(drug_card(page)).to_contain_text("Rejected")
     expect(drug_row(page)).to_contain_text("Scheduled")
@@ -175,7 +199,9 @@ def test_review_row_is_keyboard_accessible_and_fits_narrow_screen(
     page.screenshot(path=tmp_path / "review-desktop.png", full_page=True)
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-    scroll = drug_card(page).get_by_role("region", name="Scrollable manager decision", exact=True)
+    scroll = drug_card(page).get_by_role(
+        "region", name="Scrollable manager decision", exact=True
+    )
     assert scroll.evaluate("e => e.scrollWidth > e.clientWidth")
     scroll.focus()
     page.keyboard.press("Tab")
