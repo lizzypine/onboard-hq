@@ -85,8 +85,8 @@ def test_target_rejects_wrong_owners_versions_duplicates_and_invalid_values():
                     )
                 ).fetchall()
                 assert {row["confdeltype"]: row["n"] for row in policies} == {
-                    "c": 10,
-                    "r": 4,
+                    "c": 11,
+                    "r": 5,
                 }
                 collections = await (
                     await conn.execute(

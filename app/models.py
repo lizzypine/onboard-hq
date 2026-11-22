@@ -56,7 +56,7 @@ RecordId = Annotated[int, Field(strict=True, gt=0)]
 class StoredRequirement(Requirement):
     id: RecordId
     provider_id: RecordId
-    checklist_template_id: RecordId
+    checklist_template_id: RecordId | None
     requirement_definition_id: RecordId
     scheduled_date: date | None = None
     version: int = Field(ge=0)

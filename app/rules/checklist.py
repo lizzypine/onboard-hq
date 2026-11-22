@@ -30,7 +30,10 @@ def require_edit(
             "The checklist changed. Refresh data before editing again."
         )
     if request.status not in status_choices(
-        provider_type, current.name, current.status
+        provider_type,
+        current.name,
+        current.status,
+        is_additional=current.checklist_template_id is None,
     ):
         raise ChecklistEditInvalid("Choose a status available for this requirement.")
     if (current.status, current.scheduled_date, current.deadline) == (

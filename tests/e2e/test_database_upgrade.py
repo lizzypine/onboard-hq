@@ -175,6 +175,13 @@ def test_backup_restore_runs_old_app_with_original_uuid_history(page, legacy_cut
     before = []
     with psycopg.connect(rehearsal.url) as conn:
         before = conn.execute("SELECT id,creation_request_id FROM providers").fetchall()
+    # The additions migration has an explicitly empty down section: it changes
+    # only dbmate's bookkeeping on rollback, leaving all schema/data intact.
+    assert dbmate(rehearsal.url, "rollback").returncode == 0
+    with psycopg.connect(rehearsal.url) as conn:
+        assert conn.execute("SELECT initial_status FROM requirements").fetchall() == [
+            (None,)
+        ]
     refused = dbmate(rehearsal.url, "rollback")
     assert refused.returncode != 0
     with psycopg.connect(rehearsal.url) as conn:
