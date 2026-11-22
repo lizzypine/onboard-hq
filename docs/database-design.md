@@ -28,6 +28,10 @@ changes. No ORM is used; this document describes the model rather than defining 
 
 ## Design choices
 
+The **Provider creation walkthrough target** below extends this implemented model
+with creation-time provider-only requirements. It is a proposed schema change;
+the current twelve-table schema still requires template membership on every row.
+
 - **Version complete checklists.** A checklist template row identifies one provider
   type and one `template_version`. Providers reference the version assigned at
   creation. A revised checklist gets another version; existing providers and their
@@ -214,6 +218,52 @@ definition through membership, never a copied name column.
 an independently versioned requirement template. Every real status, requirement-date,
 or deadline change increments it. Unapproved suggestions and unsaved drafts do
 not change progress. Dates and deadlines remain independent.
+
+### Provider creation walkthrough target
+
+The scoped [Add Provider walkthrough design](superpowers/specs/2026-11-22-add-provider-walkthrough-design.md)
+allows a Manager to initialize provider-only requirements alongside the assigned
+standard checklist. Save requirement changes the modal draft only; final Add
+provider persists the provider, shared definitions as needed, and all checklist
+rows atomically. The existing column tables and ER diagram above describe the
+implemented schema; the following changes are a target, not an applied migration.
+
+- Keep all rows in `requirements`. Make `checklist_template_id` nullable: non-null
+  rows retain standard provider/version and template-membership constraints;
+  null rows identify additions for that provider only. Do not modify templates or
+  reinterpret an existing standard row as an addition.
+- Add direct `provider_id REFERENCES providers(id) ON DELETE CASCADE` and
+  `requirement_definition_id REFERENCES requirement_definitions(id) ON DELETE
+  RESTRICT` relationships, because null additional-row template IDs bypass the
+  composite foreign keys. Keep both composite foreign keys and existing unique
+  constraints/indexes. The provider-leading unique index and definition index
+  also support the new direct relationships.
+- Add optional `initial_status text`, `initial_scheduled_date date`, and
+  `initial_deadline date`. A CHECK requires a nonblank initial_status for an
+  additional row, with optional initial dates. All three must be null for standard
+  rows. Extend the ownership trigger to keep origin/identity and initial values
+  immutable. These values preserve the original creation input for reliable retry
+  comparison after progress changes; no JSON receipt/list or new table is needed.
+- Existing records remain unchanged with null initial fields. Standard rows start
+  Outstanding with unset dates; additions start with the Manager's reviewed
+  status and optional dates. All new rows start at version 0.
+- Names reuse shared immutable definitions under the existing normalized name
+  uniqueness rule. An addition cannot repeat a standard or additional name within
+  its provider. Provider deletion cascades to owned rows/history and preserves
+  shared definitions. No live individual-requirement deletion is introduced.
+- Pin creation to the reviewed template identity and membership fingerprint;
+  catalog changes require another review. Equal UUID retries compare the original
+  profile/template and immutable additional inputs before consulting today's
+  catalog and never reset saved progress. The application keeps creation recovery
+  separate from later edits and review decisions.
+
+The visible name of `scheduled_date` becomes **Expected completion date** with
+accessible explanatory help; its SQL/API name and stored values do not change.
+Unknown custom names use the agreed generic dropdown and completion rules only
+when their row is explicitly provider-only. Unknown standard requirements/types
+retain Needs review. Managed sign-in and other deferred lifecycle controls remain
+outside this target. Apply it only through a reviewed forward migration, with
+`DBMATE_NO_DUMP_SCHEMA=true`; no live migration is authorized by this document.
 
 ### 7. `updates`
 
