@@ -1,7 +1,7 @@
 "use strict";
 
 import {statusSelect} from "./statuses.js";
-import {addDateHelp} from "./date-help.js?v=3";
+import {addDateHelp} from "./date-help.js?v=4";
 
 function text(parent, tag, value, className = "") {
   const element = document.createElement(tag);

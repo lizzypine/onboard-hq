@@ -6,6 +6,7 @@ PAGE = """<!doctype html>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Onboard HQ</title>
+  <link rel="stylesheet" href="/static/provider-wizard.css?v=4">
   <style>
     * { box-sizing: border-box; }
     body { font-family: system-ui, sans-serif; margin: 0; background: #f4f6f8;
@@ -87,13 +88,6 @@ PAGE = """<!doctype html>
     .review-invalid .review-change-label { color: #8b2e23; }
     .confirmation { display: flex; gap: 8px; align-items: center; margin-top: 14px; }
     .notice { color: #425d6b; }
-    .provider-form { margin-top: 18px; }
-    .provider-form fieldset { min-width: 0; border: 1px solid #cbd5df;
-      border-radius: 6px; padding: 16px; background: #f5f8fa; }
-    .provider-form legend { font-weight: 600; }
-    .provider-create-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    .provider-name-field { grid-column: 1 / -1; }
-    .provider-field-label { display: block; font-weight: 600; margin-bottom: 6px; }
     #provider-creation-status:empty { display: none; }
     .monitoring-counts { display: grid; grid-template-columns: repeat(4, 1fr);
       gap: 12px; margin: 16px 0; }
@@ -107,13 +101,12 @@ PAGE = """<!doctype html>
     #request-status { min-height: 1.5em; }
     @media (max-width: 600px) {
       main { padding: 14px; } section { padding: 16px; }
-      .provider-create-grid { grid-template-columns: 1fr; }
       .checklist-edit-grid { grid-template-columns: 1fr; }
       .checklist-fields { max-width: calc(100vw - 100px); }
       .monitoring-counts { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
-  <script src="/static/onboarding.js?v=3" type="module"></script>
+  <script src="/static/onboarding.js?v=4" type="module"></script>
 </head>
 <body>
 <main>
@@ -130,7 +123,7 @@ PAGE = """<!doctype html>
   </section>
   <section aria-labelledby="provider-heading">
     <div class="section-heading"><h2 id="provider-heading">1. Select a provider</h2>
-      <button id="add-provider" type="button" hidden>Add provider</button></div>
+      <button id="add-provider" type="button" hidden><span class="provider-plus" aria-hidden="true">+</span>Add provider</button></div>
     <label>Provider view <select id="provider-state"><option value="active">Active</option><option value="archived">Archived</option></select></label>
 <label for="provider">Provider</label>
     <select id="provider" disabled><option>Loading providers…</option></select>
@@ -138,28 +131,27 @@ PAGE = """<!doctype html>
     <div class="actions">
       <button id="refresh-data" type="button">Refresh data</button>
     </div>
-    <form id="provider-form" class="provider-form" aria-label="Add provider" hidden>
-      <fieldset id="provider-fields">
-        <legend>Add fictional provider</legend>
-        <p class="notice">Use a fictional name for this prototype. The selected type's requirements start Outstanding.</p>
-        <div class="provider-create-grid">
-          <div class="provider-name-field"><label for="new-provider-name">Provider name</label>
-            <input id="new-provider-name" type="text" required placeholder="Dr. Avery Example"></div>
-          <div id="provider-type-single" hidden><span class="provider-field-label">Provider type</span><p id="provider-type-name"></p></div>
-          <div id="provider-type-picker" hidden><label for="new-provider-type">Provider type</label><select id="new-provider-type"></select></div>
-          <div><label for="new-provider-start">Proposed start date (optional)</label><input id="new-provider-start" type="date"></div>
-        </div>
-        <p id="provider-template-count" class="notice"></p>
-        <div id="provider-preview" class="table-scroll" tabindex="0" role="region" aria-label="Scrollable provider checklist preview" hidden>
-          <table aria-label="New provider checklist preview">
-            <thead><tr><th scope="col">Requirement</th><th scope="col">Status</th><th scope="col" data-date-help>Expected completion date</th><th scope="col">Deadline</th></tr></thead>
-            <tbody id="provider-preview-rows"></tbody>
-          </table>
-        </div>
-        <div class="actions"><button id="save-provider" type="submit" class="primary" disabled>Add provider</button><button id="cancel-provider" type="button">Cancel</button></div>
-      </fieldset>
-    </form>
+    <dialog id="provider-dialog" aria-labelledby="provider-modal-title" aria-describedby="provider-modal-description">
+      <form id="provider-form" aria-label="Add provider">
+        <header class="provider-modal-header">
+          <div class="provider-modal-top"><div>
+            <h2 id="provider-modal-title">Add a provider</h2>
+            <p id="provider-modal-description">Set up a fictional provider and their onboarding checklist.</p>
+          </div><button type="button" id="close-provider" class="provider-close" aria-label="Close Add provider">×</button></div>
+          <ol id="provider-progress" class="provider-steps" aria-label="Setup progress"></ol>
+        </header>
+        <p id="provider-modal-status" role="status" aria-live="polite"></p>
+        <button type="button" id="retry-provider-catalog" hidden>Retry loading requirements</button>
+        <div id="provider-step-content"></div>
+        <footer class="provider-modal-footer">
+          <button type="button" id="provider-back" class="provider-quiet">← Back</button>
+          <div class="provider-footer-actions"><button type="button" id="cancel-provider" class="provider-quiet">Cancel</button>
+            <button type="submit" id="save-provider" class="primary" disabled>Continue →</button></div>
+        </footer>
+      </form>
+    </dialog>
     <p id="provider-creation-status" role="status" aria-live="polite"></p>
+    <button type="button" id="discard-provider-recovery" hidden>Discard unreadable provider draft</button>
   </section>
   <section aria-labelledby="checklist-heading">
     <h2 id="checklist-heading">2. Onboarding checklist</h2>

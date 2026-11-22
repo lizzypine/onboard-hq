@@ -10,6 +10,7 @@ from playwright.sync_api import expect
 from tests.database import ROOT, disposable_database
 from tests.e2e.conftest import AppServer
 from tests.e2e.test_checklist_edits import editor, row
+from tests.e2e.test_provider_creation import fill_form, save_form
 from tests.fixtures.cutover import dump_database, extract_legacy, restore_database
 from tests.fixtures.legacy_database import (
     LegacyGraph,
@@ -148,8 +149,8 @@ def test_real_old_browser_cutover_preserves_history_and_all_current_flows(
     expect(row(page)).to_contain_text("2026-12-01")
     page.get_by_role("button", name="Add provider", exact=True).click()
     form = page.locator("#provider-form")
-    form.get_by_label("Provider name", exact=True).fill(provider["name"])
-    form.get_by_role("button", name="Add provider", exact=True).click()
+    fill_form(form, provider["name"], "")
+    save_form(page, server, form)
     expect(form).to_be_hidden()
     labels = (
         page.get_by_label("Provider", exact=True)

@@ -1,7 +1,7 @@
 "use strict";
 
 import {statusBadge, statusSelect} from "./statuses.js";
-import {addDateHelp} from "./date-help.js?v=3";
+import {addDateHelp} from "./date-help.js?v=4";
 import {inspectLegacyAttempt, legacyAttemptKey, recoverLegacyAttempt} from "./checklist-recovery.js?v=2";
 
 const pendingKey = "onboard-hq:pending-checklist-edit:v2";
@@ -218,6 +218,7 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvi
       row.dataset.requirementId = requirement.id;
       row.classList.toggle("editing", editId === requirement.id);
       const name = text(row, "td", requirement.name);
+      if (requirement.checklist_template_id === null) text(name, "span", "Additional · this provider only", "provider-additional-label");
       if (editId === requirement.id) text(name, "span", "Editing", "editing-label");
       text(row, "td", "").append(statusBadge(requirement.status, catalog.get(requirement.id)?.status_tone));
       text(row, "td", requirement.scheduled_date || "Not set");

@@ -1,9 +1,9 @@
 "use strict";
 
-import {renderReviewControls} from "./review.js?v=3";
-import {providerLabel, setupProviderCreation} from "./providers.js?v=3";
-import {setupChecklist} from "./checklist.js?v=3";
-import {setupDateHelp} from "./date-help.js?v=3";
+import {renderReviewControls} from "./review.js?v=4";
+import {providerLabel, setupProviderCreation} from "./providers.js?v=4";
+import {setupChecklist} from "./checklist.js?v=4";
+import {setupDateHelp} from "./date-help.js?v=4";
 
 setupDateHelp();
 
@@ -35,6 +35,7 @@ async function api(path, options = {}) {
     const message = detail || "The request could not be completed. Please try again.";
     const error = new Error(message);
     error.status = response.status;
+    error.code = data.code;
     error.savedUpdateId = data.detail?.update_id;
     throw error;
   }
@@ -243,8 +244,8 @@ checklist = setupChecklist({api, roleSelect, setBusy, onSaved: loadState, onLega
   state.preferredProviderId = provider.id;
   if (!await initialize(provider.id) || state.provider?.id !== provider.id) throw new Error("Saved view unavailable.");
 }});
-creation = setupProviderCreation({api, roleSelect, setBusy, onCreated: async id => {
-  document.getElementById("provider-state").value = "active";
+creation = setupProviderCreation({api, roleSelect, setBusy, onCreated: async (id, archived = false) => {
+  document.getElementById("provider-state").value = archived ? "archived" : "active";
   state.preferredProviderId = id;
   updateText.value = "";
   state.pending = null;
