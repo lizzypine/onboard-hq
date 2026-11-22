@@ -8,6 +8,7 @@ from psycopg import AsyncConnection
 from app.database import DatabasePool
 from app.provider_models import ProviderTypeTemplate
 from app.repository import connection
+from app.rules.catalog import normalize_name
 from app.rules.providers import ProviderCreationConflict, require_templates
 
 CATALOG_QUERY = """
@@ -28,7 +29,19 @@ def normalized_names(names: Sequence[str]) -> set[str]:
 async def configure_membership(
     conn: AsyncConnection[dict[str, Any]], template_id: int, names: Sequence[str]
 ) -> None:
-    for name in names:
+    definitions = await resolve_definitions(conn, names)
+    for key in sorted(definitions):
+        await conn.execute(
+            "INSERT INTO template_requirements VALUES (%s,%s)",
+            (template_id, definitions[key]),
+        )
+
+
+async def resolve_definitions(
+    conn: AsyncConnection[dict[str, Any]], names: Sequence[str]
+) -> dict[str, int]:
+    definitions = {}
+    for name in sorted(names, key=normalize_name):
         await conn.execute(
             "INSERT INTO requirement_definitions(name) VALUES (%s) ON CONFLICT DO NOTHING",
             (name.strip(" "),),
@@ -43,10 +56,8 @@ async def configure_membership(
             raise ProviderCreationConflict(
                 "Requirement definition changed concurrently."
             )
-        await conn.execute(
-            "INSERT INTO template_requirements VALUES (%s,%s)",
-            (template_id, definition["id"]),
-        )
+        definitions[normalize_name(name)] = int(definition["id"])
+    return definitions
 
 
 class CatalogRepository:

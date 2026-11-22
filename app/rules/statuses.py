@@ -33,6 +33,12 @@ GENERIC_ADDITIONAL_STATUSES = (
 )
 
 
+def configured_status_catalog(provider_type: str) -> dict[str, list[str]]:
+    if provider_type.strip(" ").lower() != "dentist":
+        return {}
+    return {name.lower(): list(choices) for name, choices in _DENTIST_STATUSES.items()}
+
+
 def known_statuses(
     provider_type: str, requirement_name: str, *, is_additional: bool = False
 ) -> tuple[str, ...] | None:

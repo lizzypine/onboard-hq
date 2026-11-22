@@ -376,7 +376,8 @@ def test_creation_from_archived_view_selects_the_new_active_provider(
 def test_provider_view_transitions_clear_update_text_before_selecting_another_person(
     page, app_server, seeded_provider
 ):
-    kind = page.request.get(app_server.url + "/provider-types").json()[0]["id"]
+    preview = page.request.get(app_server.url + "/provider-types").json()[0]
+    kind = preview["id"]
 
     def create(name):
         response = page.request.post(
@@ -386,6 +387,8 @@ def test_provider_view_transitions_clear_update_text_before_selecting_another_pe
                 "creation_request_id": str(uuid4()),
                 "name": name,
                 "provider_type_id": kind,
+                "checklist_template_id": preview["checklist_template_id"],
+                "template_fingerprint": preview["template_fingerprint"],
             },
         )
         assert response.status == 201

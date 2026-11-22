@@ -9,31 +9,18 @@ from app.models import ProviderSummary, Requirement, StoredProvider
 from app.provider_models import CreateProviderRequest, ProviderTypeTemplate
 from app.repository import RecordNotFound, connection, lock_retry
 from app.repository.catalog import CATALOG_QUERY
-from app.rules.providers import require_same_creation, require_templates
+from app.repository.provider_creation import (
+    existing_creation,
+    initialize_additions,
+    initialize_checklist,
+    insert_provider,
+)
+from app.rules.providers import (
+    require_additions,
+    require_reviewed_template,
+    require_templates,
+)
 from db.queries import fetch_provider
-
-
-async def existing_creation(
-    conn: AsyncConnection[dict[str, Any]], request: CreateProviderRequest
-) -> StoredProvider | None:
-    row = await (
-        await conn.execute(
-            """SELECT p.id,p.creation_request_id,p.name,
-        c.provider_type_id,p.proposed_start_date FROM providers p
-        JOIN checklist_templates c ON c.id=p.checklist_template_id
-        WHERE p.creation_request_id=%s""",
-            (request.creation_request_id,),
-        )
-    ).fetchone()
-    if row is None:
-        return None
-    require_same_creation(
-        CreateProviderRequest.model_validate(
-            {key: value for key, value in row.items() if key != "id"}
-        ),
-        request,
-    )
-    return await fetch_provider(conn, row["id"])
 
 
 async def latest_template(
@@ -63,54 +50,6 @@ async def latest_template(
     result = ProviderTypeTemplate.model_validate(row)
     require_templates(result.requirements)
     return result
-
-
-async def insert_provider(
-    conn: AsyncConnection[dict[str, Any]],
-    request: CreateProviderRequest,
-    template: ProviderTypeTemplate,
-) -> int:
-    row = await (
-        await conn.execute(
-            """INSERT INTO providers
-        (creation_request_id,name,checklist_template_id,proposed_start_date)
-        VALUES (%s,%s,%s,%s) RETURNING id""",
-            (
-                request.creation_request_id,
-                request.name,
-                template.checklist_template_id,
-                request.proposed_start_date,
-            ),
-        )
-    ).fetchone()
-    if row is None:
-        raise RecordNotFound("Provider could not be created.")
-    return int(row["id"])
-
-
-async def initialize_checklist(
-    conn: AsyncConnection[dict[str, Any]],
-    provider_id: int,
-    template: ProviderTypeTemplate,
-    values: dict[str, Requirement],
-) -> None:
-    for name in template.requirements:
-        value = values[name]
-        await conn.execute(
-            """INSERT INTO requirements
-            (provider_id,checklist_template_id,requirement_definition_id,status,deadline)
-            SELECT %s,%s,d.id,%s,%s FROM template_requirements m
-            JOIN requirement_definitions d ON d.id=m.requirement_definition_id
-            WHERE m.checklist_template_id=%s AND d.name=%s""",
-            (
-                provider_id,
-                template.checklist_template_id,
-                value.status,
-                value.deadline,
-                template.checklist_template_id,
-                name,
-            ),
-        )
 
 
 class ProviderRepository:
@@ -177,6 +116,8 @@ class ProviderRepository:
             if existing is not None:
                 return existing
             template = await latest_template(conn, request.provider_type_id)
+            require_reviewed_template(request, template)
+            require_additions(template, request.additional_requirements)
             values = (
                 initial_values
                 if initial_values is not None
@@ -191,4 +132,7 @@ class ProviderRepository:
                 )
             provider_id = await insert_provider(conn, request, template)
             await initialize_checklist(conn, provider_id, template, values)
+            await initialize_additions(
+                conn, provider_id, template, request.additional_requirements
+            )
             return await fetch_provider(conn, provider_id)

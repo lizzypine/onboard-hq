@@ -185,6 +185,8 @@ def test_unknown_type_does_not_adopt_dentist_rules(client):
             "creation_request_id": str(uuid4()),
             "name": "Synthetic Other Provider",
             "provider_type_id": template.id,
+            "checklist_template_id": template.checklist_template_id,
+            "template_fingerprint": template.template_fingerprint,
         },
     ).json()
     provider_id = created["id"]

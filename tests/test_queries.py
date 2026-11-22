@@ -79,6 +79,8 @@ def test_query_keeps_other_provider_types_and_checklists_separate(db_url):
                     creation_request_id=uuid4(),
                     name="Other Fictional Provider",
                     provider_type_id=template.id,
+                    checklist_template_id=template.checklist_template_id,
+                    template_fingerprint=template.template_fingerprint,
                 ),
                 initial_status="Outstanding",
             )

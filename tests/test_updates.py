@@ -39,6 +39,8 @@ def _post_update(client, request):
                     creation_request_id=uuid4(),
                     name=request.provider.name,
                     provider_type_id=template.id,
+                    checklist_template_id=template.checklist_template_id,
+                    template_fingerprint=template.template_fingerprint,
                     proposed_start_date=request.provider.proposed_start_date,
                 ),
                 {

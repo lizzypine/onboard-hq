@@ -32,7 +32,11 @@ async def provider_fixture(pool):
     )
     return await ProviderRepository(pool).create_from_template(
         CreateProviderRequest(
-            creation_request_id=uuid4(), name="Synthetic", provider_type_id=template.id
+            creation_request_id=uuid4(),
+            name="Synthetic",
+            provider_type_id=template.id,
+            checklist_template_id=template.checklist_template_id,
+            template_fingerprint=template.template_fingerprint,
         ),
         initial_status="Outstanding",
     )

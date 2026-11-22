@@ -105,6 +105,8 @@ def test_different_types_initialize_distinct_synthetic_checklists(db_url):
                         creation_request_id=uuid4(),
                         name="Synthetic",
                         provider_type_id=template.id,
+                        checklist_template_id=template.checklist_template_id,
+                        template_fingerprint=template.template_fingerprint,
                     ),
                     initial,
                 )

@@ -7,7 +7,6 @@ import pytest
 from playwright.sync_api import expect
 
 from tests.database import configured_test_url
-from tests.fixtures.current_database import provider_type_id
 from tests.test_checklist_edits import edit_body, endpoint
 
 MANAGER = {"X-Demo-Role": "manager"}
@@ -64,13 +63,16 @@ def save_editor(page, group):
 
 
 def second_provider(page, server):
+    preview = page.request.get(server.url + "/provider-types").json()[0]
     response = page.request.post(
         server.url + "/providers",
         headers=MANAGER,
         data={
             "creation_request_id": str(uuid4()),
             "name": "Another Fictional Provider",
-            "provider_type_id": provider_type_id(),
+            "provider_type_id": preview["id"],
+            "checklist_template_id": preview["checklist_template_id"],
+            "template_fingerprint": preview["template_fingerprint"],
         },
     )
     assert response.status == 201

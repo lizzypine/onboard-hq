@@ -94,6 +94,7 @@ export function setupProviderCreation({api, roleSelect, setBusy, onCreated}) {
     event.preventDefault();
     if (save.disabled || busy || roleSelect.value !== "manager") return;
     const payload = {creation_request_id: creationId, name: name.value.trim(), provider_type_id: selectedType().id,
+      checklist_template_id: selectedType().checklist_template_id, template_fingerprint: selectedType().template_fingerprint,
       proposed_start_date: start.value || null};
     let saved = false;
     setBusy(true);

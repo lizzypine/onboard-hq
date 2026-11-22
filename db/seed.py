@@ -49,6 +49,8 @@ async def seed_synthetic(pool: DatabasePool) -> StoredProvider:
             creation_request_id=KEKOA_CREATION_REQUEST_ID,
             name="Dr. Kekoa Ejemplo",
             provider_type_id=template.id,
+            checklist_template_id=template.checklist_template_id,
+            template_fingerprint=template.template_fingerprint,
             proposed_start_date=date(2026, 12, 1),
         ),
         {

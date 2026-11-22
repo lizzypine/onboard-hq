@@ -7,6 +7,7 @@ import psycopg
 
 from app.database import create_pool
 from app.repository.catalog import CatalogRepository
+from app.repository.providers import ProviderRepository
 from tests.database import configured_test_url
 
 
@@ -34,3 +35,19 @@ def run_async(factory):
     """Playwright sync tests already own a running loop; isolate async DB work."""
     with ThreadPoolExecutor(max_workers=1) as executor:
         return executor.submit(lambda: asyncio.run(factory())).result()
+
+
+def catalog_preview(type_id=None):
+    """Supply real preview metadata to creation inputs, including invalid-input tests."""
+
+    async def read():
+        async with create_pool(configured_test_url()) as pool:
+            return await ProviderRepository(pool).list_provider_types()
+
+    kinds = run_async(read)
+    selected = next(
+        (kind for kind in kinds if kind.id == type_id), next(iter(kinds), None)
+    )
+    if selected is None:
+        return {"id": 1, "checklist_template_id": 1, "template_fingerprint": "0" * 64}
+    return selected.model_dump()

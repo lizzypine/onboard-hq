@@ -31,12 +31,14 @@ def test_catalog_normalization_and_assigned_versions_survive_retry_and_archive()
                 creation_request_id=uuid4(),
                 name="Same display name",
                 provider_type_id=first.id,
+                checklist_template_id=first.checklist_template_id,
+                template_fingerprint=first.template_fingerprint,
             )
             saved = await repo.create_from_template(
                 request, initial_status="Outstanding"
             )
             assert saved.template_version == 1
-            await catalog.ensure_version(
+            newer = await catalog.ensure_version(
                 "Dentist", ["Drug screening", "Offer letter"], template_version=2
             )
             retry = await repo.create_from_template(
@@ -46,7 +48,13 @@ def test_catalog_normalization_and_assigned_versions_survive_retry_and_archive()
             assert retry.template_version == 1
             assert [r.name for r in retry.requirements] == ["Drug screening"]
             another = await repo.create_from_template(
-                request.model_copy(update={"creation_request_id": uuid4()}),
+                request.model_copy(
+                    update={
+                        "creation_request_id": uuid4(),
+                        "checklist_template_id": newer.checklist_template_id,
+                        "template_fingerprint": newer.template_fingerprint,
+                    }
+                ),
                 initial_status="Outstanding",
             )
             assert another.id != saved.id
