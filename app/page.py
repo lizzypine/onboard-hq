@@ -65,7 +65,10 @@ PAGE = """<!doctype html>
     #checklist-status:empty { display: none; }
     #review-disclosure > summary { cursor: pointer; }
     #review-disclosure > summary h2 { display: inline; }
-    #pending-suggestions { display: inline-block; color: #425d6b; margin-left: 10px; }
+    #pending-suggestions { color: #425d6b; }
+    .requirement-suggestions > td { padding: 16px; background: #f4f8fb;
+      border-left: 4px solid #ad7513; }
+    .requirement-suggestions h3 { margin-top: 0; }
     #review-results { margin-top: 20px; }
     p, li, blockquote { overflow-wrap: anywhere; }
     blockquote { margin: 12px 0; padding: 10px 14px; border-left: 3px solid #a9bfca;
@@ -103,10 +106,11 @@ PAGE = """<!doctype html>
       main { padding: 14px; } section { padding: 16px; }
       .checklist-edit-grid { grid-template-columns: 1fr; }
       .checklist-fields { max-width: calc(100vw - 100px); }
+      .requirement-suggestion-content { width: calc(100vw - 104px); max-width: 100%; }
       .monitoring-counts { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
-  <script src="/static/onboarding.js?v=6" type="module"></script>
+  <script src="/static/onboarding.js?v=7" type="module"></script>
 </head>
 <body>
 <main>
@@ -117,7 +121,7 @@ PAGE = """<!doctype html>
   <section aria-labelledby="role-heading">
     <h2 id="role-heading">Demo role</h2>
     <label for="demo-role">Simulated role</label>
-    <select id="demo-role"><option value="proposer">Proposer</option><option value="manager">Manager</option></select>
+    <select id="demo-role"><option value="proposer">Non-manager</option><option value="manager">Manager</option></select>
     <p class="notice">Anyone can propose an update. Manager mode can add providers, edit checklist
       statuses and dates, archive or restore providers, and approve, correct, or reject suggestions. This switch simulates a role; it does not verify identity.</p>
   </section>
@@ -160,6 +164,7 @@ PAGE = """<!doctype html>
   </section>
   <section aria-labelledby="checklist-heading">
     <h2 id="checklist-heading">2. Onboarding checklist</h2>
+    <p id="pending-suggestions" role="status" aria-live="polite">0 pending suggestions</p>
     <div id="monitoring-summary" role="region" aria-label="Monitoring summary" hidden>
       <dl class="monitoring-counts">
         <div><dt>Finished</dt><dd aria-label="Finished" id="count-finished"></dd></div>
@@ -195,8 +200,7 @@ PAGE = """<!doctype html>
   </section>
   <section aria-labelledby="review-heading">
     <details id="review-disclosure">
-      <summary><h2 id="review-heading">4. Suggestions and review history</h2>
-        <span id="pending-suggestions">0 pending suggestions</span></summary>
+      <summary><h2 id="review-heading">4. Review history</h2></summary>
       <div id="review-results"></div>
     </details>
   </section>

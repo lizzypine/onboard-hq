@@ -33,7 +33,7 @@ function monitoringLabel(indicator) {
   return indicator.deadline_state === "due_today" ? "Outstanding — due today" : "Outstanding";
 }
 
-export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvider}) {
+export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvider, requirementDetails = () => null}) {
   const body = document.getElementById("requirements");
   const notice = document.getElementById("checklist-status");
   const retry = document.getElementById("retry-checklist");
@@ -240,6 +240,14 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvi
           draw();
           body.querySelector(".checklist-fields select").focus();
         });
+      }
+      const details = requirementDetails(requirement);
+      if (details) {
+        const detailsRow = text(body, "tr", "", "requirement-suggestions");
+        detailsRow.dataset.requirementId = requirement.id;
+        const cell = text(detailsRow, "td", "");
+        cell.colSpan = action.hidden ? 5 : 6;
+        cell.append(details);
       }
       if (editId === requirement.id) {
         if (preservedEditor) { row.after(preservedEditor); syncDraft = preservedSync; }

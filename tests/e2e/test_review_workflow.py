@@ -34,7 +34,7 @@ def drug_card(page):
 def drug_row(page):
     return (
         page.get_by_role("table", name="Onboarding checklist")
-        .get_by_role("row")
+        .locator("#requirements > .requirement-row")
         .filter(has_text="Drug screening")
     )
 
@@ -98,7 +98,7 @@ def test_multiple_suggestions_have_independent_review_decisions(page, app_server
     expect(drug_row(page)).to_contain_text("Completed")
     credential_row = (
         page.get_by_role("table", name="Onboarding checklist")
-        .get_by_role("row")
+        .locator("#requirements > .requirement-row")
         .filter(has_text="Insurance credentialing")
     )
     expect(credential_row).to_contain_text("Pending")
