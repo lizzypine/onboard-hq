@@ -2,8 +2,9 @@
 
 import {renderReviewControls} from "./review.js?v=4";
 import {providerLabel, setupProviderCreation} from "./providers.js?v=4";
-import {setupChecklist} from "./checklist.js?v=4";
+import {setupChecklist} from "./checklist.js?v=5";
 import {setupDateHelp} from "./date-help.js?v=4";
+import {setupProviderLifecycle} from "./provider-lifecycle.js?v=2";
 
 setupDateHelp();
 
@@ -17,6 +18,7 @@ const results = document.getElementById("review-results");
 const state = {provider: null, monitoring: null, history: [], edits: [], checklistOptions: [], busy: false, generation: 0, pending: null, preferredProviderId: null};
 let creation = null;
 let checklist = null;
+let lifecycle = null;
 const disclosure = document.getElementById("review-disclosure");
 disclosure.open = false;
 
@@ -49,9 +51,12 @@ function setBusy(value) {
   roleSelect.disabled = value;
   refreshButton.disabled = value;
   submitButton.disabled = value || !state.provider || Boolean(state.provider.archived_at);
-  document.querySelectorAll(".review-fields").forEach(element => { element.disabled = value; });
+  document.querySelectorAll(".review-fields").forEach(element => {
+    element.disabled = value || !state.provider || Boolean(state.provider.archived_at);
+  });
   creation?.setBusy(value);
   checklist?.setBusy(value);
+  lifecycle?.setBusy(value);
 }
 
 function renderMonitoring() {
@@ -70,6 +75,7 @@ function renderChecklist() {
   renderMonitoring();
   document.getElementById("empty-checklist").hidden = !state.provider || state.provider.requirements.length > 0;
   checklist?.render(state.provider, state.monitoring, state.checklistOptions);
+  lifecycle?.render(state.provider);
 }
 
 function option(select, value, label) {
@@ -199,7 +205,9 @@ async function initialize(preferredId = state.preferredProviderId) {
     providers.forEach(provider => option(providerSelect, provider.id, providerLabel(provider, providers)));
     if (providers.some(provider => String(provider.id) === String(selected))) providerSelect.value = selected;
     if (!providers.length) {
-      status.textContent = "No providers yet. A manager can add a fictional provider when templates are configured.";
+      status.textContent = document.getElementById("provider-state").value === "archived"
+        ? "No archived providers. Choose Active to view onboarding providers."
+        : "No active providers. Choose Archived to view or restore providers, or ask a manager to add a fictional provider.";
       return false;
     }
     await loadState();
@@ -253,8 +261,32 @@ creation = setupProviderCreation({api, roleSelect, setBusy, onCreated: async (id
   if (!await initialize(id) || state.provider?.id !== id) throw new Error("Saved provider could not load.");
   providerSelect.focus();
 }});
-roleSelect.addEventListener("change", () => { renderHistory(); creation.syncRole(); checklist.syncRole(); });
+lifecycle = setupProviderLifecycle({api, roleSelect, setBusy, onChanged: async provider => {
+  const archived = Boolean(provider.archived_at);
+  document.getElementById("provider-state").value = archived ? "archived" : "active";
+  state.preferredProviderId = provider.id;
+  updateText.value = "";
+  state.pending = null;
+  disclosure.open = false;
+  checklist.resetDraft();
+  if (!await initialize(provider.id) || state.provider?.id !== provider.id
+      || Boolean(state.provider.archived_at) !== archived) {
+    clearSnapshot();
+    throw new Error("Saved provider view unavailable.");
+  }
+  return state.provider;
+}, onUnavailable: (id, archived) => {
+  document.getElementById("provider-state").value = archived ? "archived" : "active";
+  state.preferredProviderId = id;
+  updateText.value = "";
+  state.pending = null;
+  disclosure.open = false;
+  providerSelect.replaceChildren();
+  clearSnapshot();
+}});
+roleSelect.addEventListener("change", () => { renderHistory(); creation.syncRole(); checklist.syncRole(); lifecycle.syncRole(); });
 function changeProviderSelection() {
+  lifecycle.clearRecovery();
   state.preferredProviderId = null;
   updateText.value = "";
   state.pending = null;
@@ -262,7 +294,11 @@ function changeProviderSelection() {
   initialize();
 }
 providerSelect.addEventListener("change", changeProviderSelection);
-refreshButton.addEventListener("click", async () => { await initialize(); await checklist.recoverLegacy(); });
+refreshButton.addEventListener("click", async () => {
+  if (await lifecycle.refresh()) return;
+  await initialize();
+  await checklist.recoverLegacy();
+});
 initialize().then(() => checklist.recoverLegacy());
 
 document.getElementById("provider-state").addEventListener("change", changeProviderSelection);

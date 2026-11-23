@@ -15,7 +15,7 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 - Include a synthetic message mentioning two providers when evaluating provider scoping. Ethan suggested this harder case, but its expected behavior is not yet specified; settle it in the spec before implementing support for updates about multiple providers.
 - Policy/checklist documents retrieved by provider type, with citations to policy lines, are an investigation option from Ethan's feedback. Document retrieval and RAG are not committed version-one requirements.
 - Ethan suggested comparing the time to answer "what's still outstanding for Dr. X?" using the current process versus the app. Keep dashboard correctness checks; investigate this additional value measure with the health center contact before setting evaluation targets.
-- Anyone can propose updates; only a manager can add fictional providers, approve suggestions, or directly save checklist status/date/deadline edits. For this prototype, use a clearly labeled simulated Proposer/Manager role switch rather than sign-in. Enforce it in creation, review, and manual save operations; it is not real access control. Manual saves require atomic immutable before/after history, stable retry identities, and shared requirement version checks.
+- Anyone can propose updates; only a manager can add fictional providers, archive or restore providers, approve suggestions, or directly save checklist status/date/deadline edits. For this prototype, use a clearly labeled simulated Proposer/Manager role switch rather than sign-in. Enforce it in creation, lifecycle, review, and manual save operations; it is not real access control. Manual saves require atomic immutable before/after history, stable retry identities, and shared requirement version checks.
 - Persist application records in Neon PostgreSQL using `DATABASE_URL` from the environment. Manage schema changes with dbmate SQL migrations. Keep database credentials in `.env`, and use placeholder values only in `.env.example`. Automated database tests must use a separate test database rather than the configured Neon application database.
 - Use Pydantic for request/response validation and structured model output. Keep authorization and business rules in plain Python and relational integrity constraints in PostgreSQL.
 - The persistence and manager-review slice requires automated unit, PostgreSQL integration, and real-browser end-to-end tests, run locally and in CI. Use `TestModel` with real model requests disabled in every layer; never point automated tests at the Neon application database.
@@ -26,6 +26,7 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 - `app/main.py`: routes, dependency/lifecycle wiring, and HTTP error mapping. No business rules.
 - `app/page.py`: page markup; `app/static/onboarding.js`: coherent provider selection/loading, creation recovery, history display, and saved-review orchestration.
 - `app/static/providers.js`: Manager creation/catalog requests, frozen save recovery, coherent selection callbacks, and duplicate-name labels. No analysis or review calls.
+- `app/static/provider-lifecycle.js`: inline Manager Archive/Restore controls, native archive confirmation, explicit desired-state requests, and read-only reconciliation of unconfirmed responses. No automatic write retries.
 - `app/static/provider-wizard.js` and `app/static/provider-wizard.css`: native five-step modal, per-item additional requirement drafts, final review, and scoped layout. No HTTP/storage/model calls.
 - `app/static/provider-recovery.js`: validated frozen creation requests in sessionStorage; no HTTP/model calls or automatic replay.
 - `app/static/date-help.js`: shared Expected completion date explanation on hover/focus/tap, scoped to the active dialog when open; SQL/API fields remain named scheduled_date.
@@ -44,6 +45,8 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 - `app/rules/statuses.py`: shared synthetic/provider-only status choices, completion classification, and badge tones; unknown standard requirements/types retain Needs review. Unconfigured provider-only rows use the generic vocabulary with Completed meaning finished.
 - `app/repository/checklist.py`: locked atomic checklist edits with append-only retryable audit history.
 - `app/providers.py`: manager-only provider creation orchestration; no HTTP or model calls.
+- `app/provider_lifecycle.py`: Manager archive/restore orchestration; no HTTP/model calls.
+- `app/repository/provider_lifecycle.py`: provider-lock-serialized archived_at changes only; preserves assigned checklists and history.
 - `app/rules/providers.py`: pure creation authorization, reviewed-template/addition validation, defaults, and immutable creation retry comparison.
 - `app/rules/catalog.py`: pure normalized catalog names and reviewed-template membership fingerprints.
 - `app/monitoring_models.py`: derived dashboard contracts, separate from stored provider/context snapshots.
@@ -52,7 +55,7 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 - `app/repository/catalog.py`: immutable complete-checklist version configuration for seeds/tests; normalized names, no administration route.
 - `app/repository/provider_creation.py`: immutable creation receipt reconstruction, provider/checklist insertions, and additional definition resolution within the caller's transaction.
 - `app/repository/snapshots.py`: save and reconstruct relational captured requirement state within the caller's transaction.
-- `app/rules/provider_state.py`: pure archived-state write guard; archived records remain viewable.
+- `app/rules/provider_state.py`: pure lifecycle Manager authorization and archived-state write guard; archived records remain viewable.
 - `app/repository/providers.py`: PostgreSQL provider/type reads and atomic template-based checklist initialization with creation retry identities; the provider/checklist SELECT is in `db/queries.py`. Repository transaction helpers are in `app/repository/__init__.py`.
 - `db/queries.py`: one parameterized `fetch_provider` query returning a typed provider and its own checklist; used by production repositories and tested directly in `tests/test_queries.py`.
 - `db/seed.py`: explicit, repeatable synthetic development seed; run with `python -m db.seed`. Never run at application startup. `app/seed.py` preserves the earlier CLI/imports for compatibility.
