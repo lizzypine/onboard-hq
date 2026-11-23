@@ -1,6 +1,17 @@
 """Pure archived-state write rule."""
 
-from app.models import ProviderSummary
+from app.models import DemoRole, ProviderSummary
+
+
+class ProviderLifecycleForbidden(ValueError):
+    """Only the simulated Manager can archive or restore a provider."""
+
+
+def require_lifecycle_manager(role: DemoRole) -> None:
+    if role != "manager":
+        raise ProviderLifecycleForbidden(
+            "Manager mode is required to archive or restore providers."
+        )
 
 
 class ProviderArchivedConflict(ValueError):

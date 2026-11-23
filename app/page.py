@@ -106,7 +106,7 @@ PAGE = """<!doctype html>
       .monitoring-counts { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
-  <script src="/static/onboarding.js?v=4" type="module"></script>
+  <script src="/static/onboarding.js?v=5" type="module"></script>
 </head>
 <body>
 <main>
@@ -119,7 +119,7 @@ PAGE = """<!doctype html>
     <label for="demo-role">Simulated role</label>
     <select id="demo-role"><option value="proposer">Proposer</option><option value="manager">Manager</option></select>
     <p class="notice">Anyone can propose an update. Manager mode can add providers, edit checklist
-      statuses and dates, and approve, correct, or reject suggestions. This switch simulates a role; it does not verify identity.</p>
+      statuses and dates, archive or restore providers, and approve, correct, or reject suggestions. This switch simulates a role; it does not verify identity.</p>
   </section>
   <section aria-labelledby="provider-heading">
     <div class="section-heading"><h2 id="provider-heading">1. Select a provider</h2>
@@ -130,7 +130,10 @@ PAGE = """<!doctype html>
     <p id="provider-description"></p>
     <div class="actions">
       <button id="refresh-data" type="button">Refresh data</button>
+      <button id="archive-provider" type="button" hidden>Archive provider</button>
+      <button id="restore-provider" type="button" class="primary" hidden>Restore provider</button>
     </div>
+    <p id="provider-lifecycle-status" role="status" aria-live="polite"></p>
     <dialog id="provider-dialog" aria-labelledby="provider-modal-title" aria-describedby="provider-modal-description">
       <form id="provider-form" aria-label="Add provider">
         <header class="provider-modal-header">

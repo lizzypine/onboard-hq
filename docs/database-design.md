@@ -17,10 +17,10 @@ that schema. Migrations are not applied
 automatically; follow [the cutover runbook](database-cutover.md) for an existing
 database and obtain explicit authorization before changing Neon.
 
-The `archived_at` field, active/archived viewing, and archived write guards are
-implemented. Archive/Restore/Delete action endpoints and buttons remain future
-work, as does managed sign-in. The lifecycle rules below describe their agreed
-behavior; documentation does not imply that those controls are available.
+The `archived_at` field, active/archived viewing, archived write guards, and
+Manager Archive/Restore endpoints and inline controls are implemented. Permanent
+Delete controls and managed sign-in remain future work. Archive/Restore changes
+only the existing lifecycle field and requires no additional migration.
 
 Use synthetic provider records and administrative updates only. Preserve original
 messages, proposed changes, supporting evidence, and independent Manager decisions.
@@ -486,9 +486,9 @@ The unique suggestion key covers `review_decisions.suggestion_id`.
 
 ## Archive, restoration, and permanent deletion
 
-Archive/Restore/Delete action controls are deferred. Current views and server
-operations already respect stored archive state, and provider-owned SQL cascades
-are tested. The following rules govern the future action interface.
+Archive/Restore controls are implemented beside the selected provider. Permanent
+Delete controls remain deferred; provider-owned SQL cascades are tested. The
+following rules govern the lifecycle interface.
 
 - Only Manager mode can archive, restore, or permanently delete a provider.
   The role remains simulated until future managed sign-in is introduced.
@@ -506,6 +506,26 @@ are tested. The following rules govern the future action interface.
   and every other provider's records.
 - Archiving is not a completion status. Do not change requirement statuses to
   describe the provider's lifecycle.
+
+The archive action confirms the provider's name and explains that saved records
+are preserved and unsaved edits are discarded. After archiving, the app selects
+that provider in Archived; Restore returns the same provider to Active. Loading
+the selected checklist, monitoring, and history remains coherent. Empty Active
+and Archived lists remain navigable.
+
+`POST /providers/{id}/archive` and `POST /providers/{id}/restore` enforce Manager
+mode and serialize with the same provider row lock used by updates, reviews,
+and manual edits. Repeated archive preserves its existing timestamp; repeated
+restore leaves it null. Neither operation changes requirement versions or creates
+audit/model records. Previously claimed analysis may finish saving evidence;
+archiving prevents new submissions, review decisions, and manual changes.
+
+After a lost response, the browser reads current state without replaying a write.
+It loads the actual Active/Archived view before reporting success. If a save is
+confirmed but the view cannot load, or if both the response and reconciliation
+are unavailable, clear stale editable data and offer Refresh data. Retain existing
+frozen creation/manual-save recovery records. Lifecycle event history remains
+outside scope.
 
 ## Reduced synthetic example
 

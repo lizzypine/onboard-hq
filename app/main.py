@@ -33,10 +33,12 @@ from app.models import (
 from app.monitoring import get_dashboard, get_monitoring_date
 from app.monitoring_models import ProviderDashboard
 from app.page import PAGE
+from app.provider_lifecycle import change_archive_state
 from app.provider_models import CreateProviderRequest, ProviderTypeTemplate
 from app.providers import add_provider
 from app.repository import RecordNotFound
 from app.repository.checklist import ChecklistRepository
+from app.repository.provider_lifecycle import ProviderLifecycleRepository
 from app.repository.providers import ProviderRepository
 from app.repository.reviews import ReviewRepository
 from app.repository.updates import UpdateConflict, UpdateRepository
@@ -46,7 +48,10 @@ from app.rules.checklist import (
     ChecklistEditForbidden,
     ChecklistEditInvalid,
 )
-from app.rules.provider_state import ProviderArchivedConflict
+from app.rules.provider_state import (
+    ProviderArchivedConflict,
+    ProviderLifecycleForbidden,
+)
 from app.rules.providers import (
     ProviderCreationConflict,
     ProviderCreationForbidden,
@@ -133,6 +138,28 @@ async def provider(
     repository: Annotated[ProviderRepository, Depends(get_repository)],
 ) -> StoredProvider:
     return await repository.get_provider(provider_id)
+
+
+@router.post("/providers/{provider_id}/archive", response_model=StoredProvider)
+async def archive_provider(
+    provider_id: ResourcePath,
+    pool: Annotated[DatabasePool, Depends(get_pool)],
+    role: Annotated[DemoRole, Header(alias="X-Demo-Role")] = "proposer",
+) -> StoredProvider:
+    return await change_archive_state(
+        ProviderLifecycleRepository(pool), provider_id, True, role
+    )
+
+
+@router.post("/providers/{provider_id}/restore", response_model=StoredProvider)
+async def restore_provider(
+    provider_id: ResourcePath,
+    pool: Annotated[DatabasePool, Depends(get_pool)],
+    role: Annotated[DemoRole, Header(alias="X-Demo-Role")] = "proposer",
+) -> StoredProvider:
+    return await change_archive_state(
+        ProviderLifecycleRepository(pool), provider_id, False, role
+    )
 
 
 @router.get("/providers/{provider_id}/dashboard", response_model=ProviderDashboard)
@@ -269,6 +296,7 @@ def create_app() -> FastAPI:
     application.add_exception_handler(ChecklistEditConflict, review_conflict)
     application.add_exception_handler(ChecklistEditInvalid, review_invalid)
     application.add_exception_handler(ProviderArchivedConflict, review_conflict)
+    application.add_exception_handler(ProviderLifecycleForbidden, review_forbidden)
     return application
 
 

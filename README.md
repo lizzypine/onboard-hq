@@ -62,6 +62,17 @@ the matching updated app. Its empty down section leaves schema/data intact and
 is not a downgrade procedure. Existing providers do not need reseeding for this
 feature. Live Neon migration requires separate authorization.
 
+Managers can now archive or restore a provider from **Select a provider**:
+switch the simulated role to **Manager**, select the provider, and choose
+**Archive provider**. Confirm the provider's name; saved checklist progress and
+history are preserved, while unsaved edits are discarded. The app switches to
+**Archived** and keeps that provider selected for viewing. Choose **Restore
+provider** to return them to **Active** with the same checklist, statuses, dates,
+deadlines, assigned template version, and history. Existing archived providers
+can be selected through **Provider view → Archived** and restored the same way.
+These controls need no additional migration. Permanent deletion remains deferred.
+The role switch is simulated, not real sign-in or access control.
+
 Disable dbmate's automatic schema dump for credentialed connections: its dump
 command passes the connection URL to `pg_dump` as a process argument. The committed
 `db/schema.sql` snapshot is generated from a passwordless disposable local database

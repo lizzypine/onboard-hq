@@ -5,8 +5,9 @@ as one unit. It is an operator procedure, not an automatic startup task. A merge
 PR does not apply it to Neon. Obtain explicit authorization for the intended live
 database before the maintenance window.
 
-Archive/Restore/Delete action buttons and managed sign-in are separate follow-ups.
-The app already respects archived state as view-only. Use synthetic records only.
+Manager Archive/Restore controls are available after the matching application
+release and need no new migration. Permanent Delete controls and managed sign-in
+remain follow-ups. Archived state is view-only. Use synthetic records only.
 
 ## Before the window
 
