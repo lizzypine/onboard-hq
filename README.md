@@ -53,6 +53,15 @@ migrations explicitly, with PostgreSQL 18's tools on PATH:
 npx dbmate --no-dump-schema -e DATABASE_URL_UNPOOLED migrate
 ```
 
+For an already normalized database, the Add Provider walkthrough additionally
+requires `20261122000100_add_provider_requirements.sql`. Merging the implementation
+updates source code; it does not apply this migration. Stop the old app, keep a
+verified backup, run the explicit migration with `DBMATE_NO_DUMP_SCHEMA=true`,
+check `npx dbmate -e DATABASE_URL_UNPOOLED status` for `Pending: 0`, then restart
+the matching updated app. Its empty down section leaves schema/data intact and
+is not a downgrade procedure. Existing providers do not need reseeding for this
+feature. Live Neon migration requires separate authorization.
+
 Disable dbmate's automatic schema dump for credentialed connections: its dump
 command passes the connection URL to `pg_dump` as a process argument. The committed
 `db/schema.sql` snapshot is generated from a passwordless disposable local database
@@ -129,7 +138,7 @@ Color never replaces status text or changes completion rules. Red monitoring
 indicators still follow saved deadlines and the server's Hawaii date.
 
 In **Manager** mode, use a checklist row's **Edit** action to change **Status**,
-**Requirement date**, or **Deadline**, then **Save changes** or **Cancel**. Status
+**Expected completion date**, or **Deadline**, then **Save changes** or **Cancel**. Status
 uses a requirement-specific dropdown, including the existing value when unfamiliar.
 Dates are explicit full dates; clearing either date removes it on Save. Changing
 one date never substitutes it for the other. No-op/invalid drafts cannot be saved.
@@ -151,23 +160,38 @@ the retry cannot reapply changes over later progress. A confirmed save with a fa
 view refresh says it was saved; **Refresh data** or retry loads the saved state.
 Manual saves appear alongside updates and review decisions in newest-first history.
 
-In **Manager** mode, choose **Add provider**, enter a fictional name, choose a
-configured type, and optionally set a proposed start date. A single available type
-appears as text. Review the requirement preview, then save. Each provider receives
-an independent checklist from the current type template: all requirements start
-**Outstanding**, with dates and deadlines **Not set**. Creation makes no model call;
-enter progress through the existing update-and-approval flow. Managers can also add
-the first provider when templates are configured. Types with no requirements are
-unavailable; this screen does not edit templates or existing provider profiles.
+In **Manager** mode, the green **+ Add provider** button opens five steps: fictional
+name, configured provider type dropdown (including when only one is available),
+optional proposed start date, requirements, and final review. Standard rows start
+**Outstanding** with both dates **Not set**. Add a provider-only requirement by
+entering its name, status dropdown, optional Expected completion date, and optional
+deadline, then choosing **Save requirement**. It joins the combined draft list;
+you can Edit/Remove it or add another before final review. These additions never
+modify a shared template. A pending requirement editor must be saved or canceled
+before Review.
+
+The final **Add provider** button has no plus sign and saves the provider and all
+requirements in one transaction, without a model call. No draft step writes to the
+database. A changed standard checklist requires another review before saving.
+Managers can create the first provider when templates are configured; types with
+no requirements are unavailable. This screen does not edit existing profiles or
+add/remove requirements after creation.
 
 The new provider is selected after saving; the previous provider's update draft is
 cleared. Duplicate names remain separate records, distinguished in the picker by
 type, start date, and a short reference. If a save response is lost, retry the same
-form to recover the original record. Keep its details unchanged: changed details
-under the same save identity conflict rather than overwrite a saved provider. If
-saving succeeds but loading fails, use **Refresh data** or retry that form to load
-the saved provider. Creation never resets progress or reapplies template changes
-on retry. Cancel closes the form; it does not undo a save that already succeeded.
+save using **Retry save** to recover the original record. Submitted details stay
+frozen and survive reload in this browser tab. Recovery requires explicit Manager
+action; it never posts automatically. If browser storage cannot retain a new save,
+no creation request is sent. If saving succeeds but loading fails, use **Refresh
+data** or **Reload saved provider** to load the saved view. Creation never resets
+progress or reapplies template changes on retry. Cancel discards an unsent draft;
+closing a submitted attempt retains its recovery record and cannot undo a save.
+
+**Expected completion date** means when the item is expected to finish, such as a
+scheduled drug screening. **Deadline** means the latest date it must finish. The
+**?** help works on hover, keyboard focus, and tap. Both dates remain optional and
+independent, and their underlying database/API fields are unchanged.
 
 Each pending Manager decision shows the affected requirement as an editable
 checklist row. Highlighted cells and text identify differences from saved values;
@@ -195,8 +219,8 @@ and application restarts. A stale or already-reviewed suggestion cannot overwrit
 newer progress; refresh or reanalyze before approving. A failed or interrupted
 analysis remains visible and creates no reviewable partial suggestions. Retrying the
 same request ID does not repeat analysis; editing/submitting a new proposal creates
-a new request. No real accounts, checklist-exception controls, or semantic routing
-are included. Provider-type templates are separate from individual checklists;
+a new request. Real accounts, post-creation requirement additions/removals, and
+semantic routing remain outside scope. Provider-type templates are separate from individual checklists;
 template edits do not silently change established checklists.
 
 The checklist shows **Finished**, **Remaining**, **Overdue**, and **Needs review**
@@ -207,6 +231,10 @@ Received Hawaii/State NED licenses, Completed drug screening, and Approved insur
 credentialing. Status matching trims whitespace and ignores case without changing
 the saved wording. Unrecognized statuses, requirements, or provider types show
 Needs review, which refers to the completion rule rather than a pending suggestion.
+Unconfigured provider-only additions use the explicit generic status list;
+Completed means finished, while Outstanding/Pending/Scheduled/Incomplete remain
+unfinished. Known provider/name rules still take precedence, and unfamiliar saved
+or proposed values retain Needs review.
 
 Monitoring uses only saved deadlines and the server's Hawaii calendar date
 (`Pacific/Honolulu`). A deadline today is due today; an unfinished requirement

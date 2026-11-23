@@ -47,7 +47,12 @@ from app.rules.checklist import (
     ChecklistEditInvalid,
 )
 from app.rules.provider_state import ProviderArchivedConflict
-from app.rules.providers import ProviderCreationConflict, ProviderCreationForbidden
+from app.rules.providers import (
+    ProviderCreationConflict,
+    ProviderCreationForbidden,
+    ProviderCreationInvalid,
+    ProviderTemplateConflict,
+)
 from app.rules.review import ReviewConflict, ReviewForbidden, ReviewValidationError
 
 
@@ -236,6 +241,12 @@ async def review_invalid(_request: Request, error: Exception) -> JSONResponse:
     return JSONResponse(status_code=422, content={"detail": str(error)})
 
 
+async def template_conflict(_request: Request, error: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=409, content={"detail": str(error), "code": "template_changed"}
+    )
+
+
 def create_app() -> FastAPI:
     application = FastAPI(title="Onboard HQ", lifespan=lifespan)
     application.include_router(router)
@@ -250,6 +261,8 @@ def create_app() -> FastAPI:
     application.add_exception_handler(ReviewForbidden, review_forbidden)
     application.add_exception_handler(ProviderCreationForbidden, review_forbidden)
     application.add_exception_handler(ProviderCreationConflict, review_conflict)
+    application.add_exception_handler(ProviderTemplateConflict, template_conflict)
+    application.add_exception_handler(ProviderCreationInvalid, review_invalid)
     application.add_exception_handler(ReviewConflict, review_conflict)
     application.add_exception_handler(ReviewValidationError, review_invalid)
     application.add_exception_handler(ChecklistEditForbidden, review_forbidden)

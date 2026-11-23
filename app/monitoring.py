@@ -30,8 +30,18 @@ async def get_dashboard(
         checklist_options=[
             RequirementEditOptions(
                 requirement_id=r.id,
-                statuses=status_choices(provider.provider_type, r.name, r.status),
-                status_tone=status_tone(provider.provider_type, r.name, r.status),
+                statuses=status_choices(
+                    provider.provider_type,
+                    r.name,
+                    r.status,
+                    is_additional=r.checklist_template_id is None,
+                ),
+                status_tone=status_tone(
+                    provider.provider_type,
+                    r.name,
+                    r.status,
+                    is_additional=r.checklist_template_id is None,
+                ),
             )
             for r in provider.requirements
         ],

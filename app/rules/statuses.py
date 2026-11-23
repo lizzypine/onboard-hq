@@ -24,10 +24,27 @@ _DENTIST_STATUSES = {
     ),
 }
 
+GENERIC_ADDITIONAL_STATUSES = (
+    "Outstanding",
+    "Pending",
+    "Scheduled",
+    "Incomplete",
+    "Completed",
+)
 
-def known_statuses(provider_type: str, requirement_name: str) -> tuple[str, ...] | None:
+
+def configured_status_catalog(provider_type: str) -> dict[str, list[str]]:
     if provider_type.strip(" ").lower() != "dentist":
-        return None
+        return {}
+    return {name.lower(): list(choices) for name, choices in _DENTIST_STATUSES.items()}
+
+
+def known_statuses(
+    provider_type: str, requirement_name: str, *, is_additional: bool = False
+) -> tuple[str, ...] | None:
+    fallback = GENERIC_ADDITIONAL_STATUSES if is_additional else None
+    if provider_type.strip(" ").lower() != "dentist":
+        return fallback
     normalized = requirement_name.strip(" ").lower()
     return next(
         (
@@ -35,21 +52,32 @@ def known_statuses(provider_type: str, requirement_name: str) -> tuple[str, ...]
             for name, choices in _DENTIST_STATUSES.items()
             if name.lower() == normalized
         ),
-        None,
+        fallback,
     )
 
 
 def status_choices(
-    provider_type: str, requirement_name: str, *preserved: str
+    provider_type: str,
+    requirement_name: str,
+    *preserved: str,
+    is_additional: bool = False,
 ) -> list[str]:
-    choices = known_statuses(provider_type, requirement_name) or ("Outstanding",)
+    choices = known_statuses(
+        provider_type, requirement_name, is_additional=is_additional
+    ) or ("Outstanding",)
     return list(dict.fromkeys([*choices, *preserved]))
 
 
 def classify_completion(
-    provider_type: str, requirement_name: str, status: str
+    provider_type: str,
+    requirement_name: str,
+    status: str,
+    *,
+    is_additional: bool = False,
 ) -> Completion:
-    choices = known_statuses(provider_type, requirement_name)
+    choices = known_statuses(
+        provider_type, requirement_name, is_additional=is_additional
+    )
     if choices is None:
         return "needs_review"
     normalized = status.strip().casefold()
@@ -61,9 +89,15 @@ def classify_completion(
 
 
 def status_tone(
-    provider_type: str, requirement_name: str, status: str
+    provider_type: str,
+    requirement_name: str,
+    status: str,
+    *,
+    is_additional: bool = False,
 ) -> Literal["finished", "progress", "attention", "unknown"]:
-    completion = classify_completion(provider_type, requirement_name, status)
+    completion = classify_completion(
+        provider_type, requirement_name, status, is_additional=is_additional
+    )
     if completion == "finished":
         return "finished"
     if completion == "needs_review":

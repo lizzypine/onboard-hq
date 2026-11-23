@@ -52,7 +52,7 @@ def test_review_row_highlights_proposed_status_and_keeps_evidence(
 ):
     table = manager_review(page, app_server)
     expect(table.get_by_role("columnheader")).to_have_text(
-        ["Requirement", "Status", "Requirement date", "Deadline"]
+        ["Requirement", "Status", "Expected completion date ?", "Deadline"]
     )
     expect(table.get_by_label("Reviewed status", exact=True)).to_have_value("Completed")
     status = field_cell(table, "status")
@@ -204,6 +204,10 @@ def test_review_row_is_keyboard_accessible_and_fits_narrow_screen(
     )
     assert scroll.evaluate("e => e.scrollWidth > e.clientWidth")
     scroll.focus()
+    page.keyboard.press("Tab")
+    expect(
+        table.get_by_role("button", name="About expected completion date")
+    ).to_be_focused()
     page.keyboard.press("Tab")
     expect(table.get_by_label("Reviewed status", exact=True)).to_be_focused()
     page.keyboard.press("Tab")

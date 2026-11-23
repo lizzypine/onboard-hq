@@ -29,7 +29,10 @@ def monitor_provider(
         RequirementMonitoring(
             requirement_id=requirement.id,
             completion=classify_completion(
-                provider.provider_type, requirement.name, requirement.status
+                provider.provider_type,
+                requirement.name,
+                requirement.status,
+                is_additional=requirement.checklist_template_id is None,
             ),
             deadline_state=classify_deadline(requirement.deadline, as_of_date),
         )

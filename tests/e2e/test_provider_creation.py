@@ -16,10 +16,12 @@ def providers(page, app_server):
     return page.request.get(app_server.url + "/providers").json()
 
 
-def open_form(page, app_server):
+def open_form(page, app_server, update_text=None):
     page.goto(app_server.url)
     role = page.get_by_label("Simulated role", exact=True)
     expect(role).to_be_enabled()
+    if update_text is not None:
+        page.get_by_label("Original update", exact=True).fill(update_text)
     expect(page.get_by_role("button", name="Add provider", exact=True)).to_have_count(0)
     role.select_option("manager")
     button = page.get_by_role("button", name="Add provider", exact=True)
@@ -31,12 +33,29 @@ def open_form(page, app_server):
     return form
 
 
-def fill_form(form, name="Dr. Avery Example", start="2027-01-15"):
+def fill_form(
+    form, name="Dr. Avery Example", start="2027-01-15", *, type_id=None, review=True
+):
     form.get_by_label("Provider name", exact=True).fill(name)
+    form.locator("#save-provider").click()
+    picker = form.get_by_label("Provider type", exact=True)
+    expect(picker).to_be_visible()
+    expect(picker).to_have_value("")
+    if type_id is None:
+        picker.select_option(index=1)
+    else:
+        picker.select_option(str(type_id))
+    form.locator("#save-provider").click()
+    expect(form.get_by_label("Proposed start date", exact=False)).to_have_value("")
     form.get_by_label("Proposed start date", exact=False).fill(start)
+    form.locator("#save-provider").click()
+    if review:
+        form.locator("#save-provider").click()
 
 
 def save_form(page, app_server, form):
+    if not form.get_by_role("heading", name="Review before adding", exact=True).count():
+        form.locator("#save-provider").click()
     with page.expect_response(
         lambda r: r.request.method == "POST" and r.url == app_server.url + "/providers"
     ) as response:
@@ -65,19 +84,13 @@ def test_manager_adds_and_selects_an_independent_provider(
     original = page.request.get(
         app_server.url + f"/providers/{seeded_provider.id}"
     ).json()
-    form = open_form(page, app_server)
-    expect(
-        form.get_by_role("combobox", name="Provider type", exact=True)
-    ).to_have_count(0)
-    expect(form.locator("#provider-type-name")).to_have_text("Dentist")
-    expect(form.get_by_label("Proposed start date", exact=False)).to_have_value("")
+    form = open_form(page, app_server, update_text="Old provider draft")
+    fill_form(form, review=False)
     preview = form.get_by_role(
         "table", name="New provider checklist preview", exact=True
     )
     expect(preview.locator("tbody tr")).to_have_count(5)
     expect(preview.get_by_role("cell", name="Outstanding", exact=True)).to_have_count(5)
-    page.get_by_label("Original update", exact=True).fill("Old provider draft")
-    fill_form(form)
     created = save_form(page, app_server, form)
     assert_new_counts(page)
     expect(page.get_by_label("Original update", exact=True)).to_have_value("")
@@ -100,11 +113,12 @@ def test_manager_adds_and_selects_an_independent_provider(
 
 def test_invalid_form_cancel_and_role_switch_do_not_create_records(page, app_server):
     form = open_form(page, app_server)
-    submit = form.get_by_role("button", name="Add provider", exact=True)
+    submit = form.locator("#save-provider")
     expect(submit).to_be_disabled()
     form.get_by_label("Provider name", exact=True).fill(" ")
     expect(submit).to_be_disabled()
     fill_form(form)
+    form.get_by_role("button", name="Edit date", exact=True).click()
     date = form.get_by_label("Proposed start date", exact=False)
     date.focus()
     date.press("Home")
@@ -115,6 +129,7 @@ def test_invalid_form_cancel_and_role_switch_do_not_create_records(page, app_ser
     expect(form).to_be_hidden()
     page.get_by_role("button", name="Add provider", exact=True).click()
     expect(form).to_be_visible()
+    form.get_by_role("button", name="Cancel", exact=True).click()
     page.get_by_label("Simulated role", exact=True).select_option("proposer")
     expect(form).to_be_hidden()
     expect(page.get_by_role("button", name="Add provider", exact=True)).to_have_count(0)
@@ -125,12 +140,11 @@ def test_configured_type_preview_and_names_are_safe(page, app_server):
     requirement = '<img src=x onerror="window.providerInjected=true">'
     type_id = configure_catalog("Synthetic Other", [requirement]).id
     form = open_form(page, app_server)
-    form.get_by_label("Provider type", exact=True).select_option(str(type_id))
+    name = "<script>window.providerInjected=true</script>"
+    fill_form(form, name, "", type_id=type_id, review=False)
     expect(
         form.get_by_role("table", name="New provider checklist preview")
     ).to_contain_text(requirement)
-    name = "<script>window.providerInjected=true</script>"
-    fill_form(form, name, "")
     created = save_form(page, app_server, form)
     assert created["name"] == name
     assert [r["name"] for r in created["requirements"]] == [requirement]
@@ -168,9 +182,7 @@ def test_manager_can_create_first_provider_when_templates_exist(page, app_server
         conn.execute("DELETE FROM requirements")
         conn.execute("DELETE FROM providers")
     form = open_form(page, app_server)
-    expect(
-        page.get_by_role("button", name="Analyze update", exact=True)
-    ).to_be_disabled()
+    expect(page.locator("#submit-update")).to_be_disabled()
     fill_form(form, "First Fictional Provider", "")
     save_form(page, app_server, form)
     assert_new_counts(page)
@@ -189,16 +201,16 @@ def test_missing_templates_disable_creation_without_fabricated_preview(
     expect(page.locator("#provider-creation-status")).to_contain_text(
         "No configured requirements"
     )
-    fill_form(form)
-    expect(form.get_by_role("button", name="Add provider", exact=True)).to_be_disabled()
+    form.get_by_label("Provider name", exact=True).fill("Dr. Avery Example")
+    expect(form.locator("#save-provider")).to_be_disabled()
     expect(
         form.get_by_role("table", name="New provider checklist preview")
     ).to_be_hidden()
     assert len(providers(page, app_server)) == 1
 
 
-@pytest.mark.parametrize("change_name", [False, True])
-def test_lost_creation_response_reuses_identity(page, app_server, change_name):
+@pytest.mark.parametrize("close_reopen", [False, True])
+def test_lost_creation_response_reuses_frozen_identity(page, app_server, close_reopen):
     form = open_form(page, app_server)
     fill_form(form)
     captured = []
@@ -216,20 +228,16 @@ def test_lost_creation_response_reuses_identity(page, app_server, change_name):
         "could not be confirmed"
     )
     page.unroute("**/providers", lose_response)
-    if change_name:
-        form.get_by_label("Provider name", exact=True).fill("Changed Example")
-        form.get_by_role("button", name="Add provider", exact=True).click()
-        expect(page.locator("#provider-creation-status")).to_contain_text(
-            "already saved different provider details"
-        )
-        assert all(p["name"] != "Changed Example" for p in providers(page, app_server))
-    else:
-        form.get_by_role("button", name="Add provider", exact=True).click()
-        expect(form).to_be_hidden()
-        expect(page.get_by_label("Provider", exact=True)).to_have_value(
-            str(captured[0]["id"])
-        )
-        assert_new_counts(page)
+    expect(form.get_by_label("Provider name", exact=True)).to_have_count(0)
+    if close_reopen:
+        form.get_by_role("button", name="Cancel", exact=True).click()
+        page.get_by_role("button", name="Add provider", exact=True).click()
+    form.get_by_role("button", name="Retry save", exact=True).click()
+    expect(form).to_be_hidden()
+    expect(page.get_by_label("Provider", exact=True)).to_have_value(
+        str(captured[0]["id"])
+    )
+    assert_new_counts(page)
     assert len(providers(page, app_server)) == 2
     assert (
         sum(p["name"] == "Dr. Avery Example" for p in providers(page, app_server)) == 1
@@ -269,10 +277,9 @@ def test_saved_creation_failed_refresh_recovers_new_selection(
     expect(
         page.get_by_role("region", name="Monitoring summary", exact=True)
     ).to_be_hidden()
-    expect(
-        page.get_by_role("button", name="Analyze update", exact=True)
-    ).to_be_disabled()
+    expect(page.locator("#submit-update")).to_be_disabled()
     page.unroute("**/providers**", intercept)
+    form.get_by_role("button", name="Cancel", exact=True).click()
     page.get_by_role("button", name="Refresh data", exact=True).click()
     expect(page.get_by_label("Provider", exact=True)).to_have_value(str(saved_ids[0]))
     expect(form).to_be_hidden()
@@ -328,20 +335,35 @@ def test_new_provider_analysis_and_review_stay_scoped_after_restart(
 
 def test_creation_form_keyboard_and_narrow_layout(page, app_server, tmp_path):
     form = open_form(page, app_server)
-    fill_form(form)
+    name = form.get_by_label("Provider name", exact=True)
+    name.fill("Dr. Keyboard Example")
+    name.focus()
+    page.keyboard.press("Tab")
+    expect(form.get_by_role("button", name="Cancel", exact=True)).to_be_focused()
+    page.keyboard.press("Tab")
+    expect(form.locator("#save-provider")).to_be_focused()
+    page.keyboard.press("Enter")
+    form.get_by_label("Provider type", exact=True).select_option(index=1)
+    form.locator("#save-provider").click()
+    form.get_by_label("Proposed start date", exact=False).fill("2027-01-15")
     form.screenshot(path=tmp_path / "provider-form-desktop.png")
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
-    name = form.get_by_label("Provider name", exact=True)
-    name.focus()
-    page.keyboard.press("Tab")
-    expect(form.get_by_label("Proposed start date", exact=False)).to_be_focused()
-    save = form.get_by_role("button", name="Add provider", exact=True)
+    form.get_by_label("Proposed start date", exact=False).focus()
+    save = form.locator("#save-provider")
     for _ in range(8):
         page.keyboard.press("Tab")
         if save.evaluate("e => e === document.activeElement"):
             break
     expect(save).to_be_focused()
+    page.keyboard.press("Enter")
+    save.click()
+    close = form.get_by_role("button", name="Close Add provider", exact=True)
+    close.focus()
+    page.keyboard.press("Shift+Tab")
+    expect(save).to_be_focused()
+    page.keyboard.press("Tab")
+    expect(close).to_be_focused()
     form.screenshot(path=tmp_path / "provider-form-narrow.png")
 
 
@@ -376,7 +398,8 @@ def test_creation_from_archived_view_selects_the_new_active_provider(
 def test_provider_view_transitions_clear_update_text_before_selecting_another_person(
     page, app_server, seeded_provider
 ):
-    kind = page.request.get(app_server.url + "/provider-types").json()[0]["id"]
+    preview = page.request.get(app_server.url + "/provider-types").json()[0]
+    kind = preview["id"]
 
     def create(name):
         response = page.request.post(
@@ -386,6 +409,8 @@ def test_provider_view_transitions_clear_update_text_before_selecting_another_pe
                 "creation_request_id": str(uuid4()),
                 "name": name,
                 "provider_type_id": kind,
+                "checklist_template_id": preview["checklist_template_id"],
+                "template_fingerprint": preview["template_fingerprint"],
             },
         )
         assert response.status == 201

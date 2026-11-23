@@ -1,6 +1,7 @@
 "use strict";
 
 import {statusBadge, statusSelect} from "./statuses.js";
+import {addDateHelp} from "./date-help.js?v=4";
 import {inspectLegacyAttempt, legacyAttemptKey, recoverLegacyAttempt} from "./checklist-recovery.js?v=2";
 
 const pendingKey = "onboard-hq:pending-checklist-edit:v2";
@@ -57,7 +58,7 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvi
   function renderLegacy() {
     legacyRegion.hidden = !legacyAttempt && !legacyMessage;
     const details = legacyAttempt ? "Older checklist save for " + legacyAttempt.providerName
-      + ". Status: " + legacyAttempt.body.status + ". Requirement date: " + (legacyAttempt.body.scheduled_date || "Not set")
+      + ". Status: " + legacyAttempt.body.status + ". Expected completion date: " + (legacyAttempt.body.scheduled_date || "Not set")
       + ". Deadline: " + (legacyAttempt.body.deadline || "Not set") + ". " : "";
     legacyStatus.textContent = details + legacyMessage;
     checkLegacy.hidden = dismissLegacy.hidden = !legacyAttempt;
@@ -161,10 +162,16 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvi
     text(fields, "legend", "Edit " + requirement.name);
     const grid = text(fields, "div", "", "checklist-edit-grid");
     const inputs = {};
-    for (const [field, label] of [["status", "Status"], ["scheduled_date", "Requirement date"], ["deadline", "Deadline"]]) {
-      const wrapper = text(grid, "label", label);
+    for (const [field, label] of [["status", "Status"], ["scheduled_date", "Expected completion date"], ["deadline", "Deadline"]]) {
+      const wrapper = text(grid, field === "scheduled_date" ? "div" : "label", field === "scheduled_date" ? "" : label);
+      if (field === "scheduled_date") {
+        const heading = text(wrapper, "div", "", "date-field-heading");
+        text(heading, "label", label).htmlFor = "checklist-scheduled-date";
+        addDateHelp(heading);
+      }
       const input = field === "status" ? statusSelect({label: "Checklist status", choices, value: draft[field]}) : document.createElement("input");
       if (field !== "status") { input.type = "date"; input.value = draft[field] || ""; input.setAttribute("aria-label", label); }
+      if (field === "scheduled_date") input.id = "checklist-scheduled-date";
       wrapper.append(input);
       const change = text(wrapper, "span", "", "manual-change-label");
       inputs[field] = {input, wrapper, change};
@@ -211,6 +218,7 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvi
       row.dataset.requirementId = requirement.id;
       row.classList.toggle("editing", editId === requirement.id);
       const name = text(row, "td", requirement.name);
+      if (requirement.checklist_template_id === null) text(name, "span", "Additional · this provider only", "provider-additional-label");
       if (editId === requirement.id) text(name, "span", "Editing", "editing-label");
       text(row, "td", "").append(statusBadge(requirement.status, catalog.get(requirement.id)?.status_tone));
       text(row, "td", requirement.scheduled_date || "Not set");

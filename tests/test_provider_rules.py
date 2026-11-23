@@ -23,6 +23,8 @@ def profile(**changes):
             "creation_request_id": uuid4(),
             "name": "  Dr. Avery Example  ",
             "provider_type_id": 7,
+            "checklist_template_id": 8,
+            "template_fingerprint": "a" * 64,
             **changes,
         }
     )
@@ -44,6 +46,17 @@ def test_creation_name_is_trimmed_and_start_date_is_optional():
         {"proposed_start_date": "2026-02-30"},
         {"requirements": []},
         {"status": "Signed"},
+        {"template_fingerprint": "not-a-fingerprint"},
+        {"checklist_template_id": 0},
+        {
+            "additional_requirements": [
+                {
+                    "name": "Orientation",
+                    "status": "Pending",
+                    "initial_status": "Completed",
+                }
+            ]
+        },
     ],
 )
 def test_creation_rejects_invalid_or_client_supplied_checklist_fields(changes):

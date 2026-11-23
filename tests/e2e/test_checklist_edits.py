@@ -7,7 +7,6 @@ import pytest
 from playwright.sync_api import expect
 
 from tests.database import configured_test_url
-from tests.fixtures.current_database import provider_type_id
 from tests.test_checklist_edits import edit_body, endpoint
 
 MANAGER = {"X-Demo-Role": "manager"}
@@ -64,13 +63,16 @@ def save_editor(page, group):
 
 
 def second_provider(page, server):
+    preview = page.request.get(server.url + "/provider-types").json()[0]
     response = page.request.post(
         server.url + "/providers",
         headers=MANAGER,
         data={
             "creation_request_id": str(uuid4()),
             "name": "Another Fictional Provider",
-            "provider_type_id": provider_type_id(),
+            "provider_type_id": preview["id"],
+            "checklist_template_id": preview["checklist_template_id"],
+            "template_fingerprint": preview["template_fingerprint"],
         },
     )
     assert response.status == 201
@@ -122,7 +124,7 @@ def test_manager_saves_three_fields_and_history_survives_restart(
         ["Outstanding", "Pending", "Scheduled", "Incomplete", "Completed"]
     )
     status.select_option("Completed")
-    group.get_by_label("Requirement date", exact=True).fill("2026-11-12")
+    group.get_by_label("Expected completion date", exact=True).fill("2026-11-12")
     group.get_by_label("Deadline", exact=True).fill("2026-11-20")
     saved = save_editor(page, group)
     expect(row(page).locator(".status-badge")).to_have_class(
@@ -143,7 +145,7 @@ def test_manager_saves_three_fields_and_history_survives_restart(
     page.get_by_label("Simulated role", exact=True).select_option("manager")
     row(page).get_by_role("button", name="Edit", exact=True).click()
     group = editor(page)
-    group.get_by_label("Requirement date", exact=True).fill("")
+    group.get_by_label("Expected completion date", exact=True).fill("")
     group.get_by_label("Deadline", exact=True).fill("")
     save_editor(page, group)
     expect(row(page).get_by_role("cell").nth(2)).to_have_text("Not set")
@@ -161,7 +163,7 @@ def test_invalid_noop_cancel_role_change_and_row_stripes(
     assert stripe_classes == [False, True, False, True, False]
     save = group.get_by_role("button", name="Save changes", exact=True)
     expect(save).to_be_disabled()
-    field = group.get_by_label("Requirement date", exact=True)
+    field = group.get_by_label("Expected completion date", exact=True)
     field.fill("2026-11-12")
     field.focus()
     field.press("Home")
@@ -367,13 +369,20 @@ def test_editor_keyboard_and_header_position_at_desktop_and_phone(
     status = group.get_by_role("combobox", name="Checklist status", exact=True)
     status.focus()
     page.keyboard.press("Tab")
-    expect(group.get_by_label("Requirement date", exact=True)).to_be_focused()
+    expect(
+        group.get_by_role("button", name="About expected completion date")
+    ).to_be_focused()
+    expect(page.get_by_role("tooltip")).to_be_visible()
+    page.keyboard.press("Tab")
+    expect(group.get_by_label("Expected completion date", exact=True)).to_be_focused()
     deadline = group.get_by_label("Deadline", exact=True)
     for _ in range(6):
         page.keyboard.press("Tab")
         if deadline.evaluate("e => e === document.activeElement"):
             break
-        expect(group.get_by_label("Requirement date", exact=True)).to_be_focused()
+        expect(
+            group.get_by_label("Expected completion date", exact=True)
+        ).to_be_focused()
     expect(deadline).to_be_focused()
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
@@ -449,7 +458,7 @@ def test_analysis_preserves_unsaved_manual_editor_including_partial_date(
         "Incomplete"
     )
     group.get_by_label("Deadline", exact=True).fill("2026-12-01")
-    partial = group.get_by_label("Requirement date", exact=True)
+    partial = group.get_by_label("Expected completion date", exact=True)
     partial.fill("2026-11-12")
     partial.press("Home")
     partial.press("Delete")

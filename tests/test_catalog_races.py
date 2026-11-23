@@ -15,6 +15,7 @@ from app.repository.checklist import ChecklistRepository
 from app.repository.providers import ProviderRepository
 from app.repository.updates import UpdateRepository
 from app.rules.provider_state import ProviderArchivedConflict
+from app.rules.providers import ProviderTemplateConflict
 from tests.database import disposable_database, migrate_test_database
 from tests.test_normalized_workflows import provider_fixture
 
@@ -35,7 +36,7 @@ async def wait_until_row_lock_blocks(conn):
     )
 
 
-def test_new_provider_sees_membership_committed_while_waiting_for_template_lock():
+def test_new_provider_rejects_membership_changed_while_waiting_for_template_lock():
     async def scenario(url):
         async with create_pool(url) as pool:
             template = await CatalogRepository(pool).ensure_version(
@@ -52,6 +53,8 @@ def test_new_provider_sees_membership_committed_while_waiting_for_template_lock(
                             creation_request_id=uuid4(),
                             name="Synthetic race",
                             provider_type_id=template.id,
+                            checklist_template_id=template.checklist_template_id,
+                            template_fingerprint=template.template_fingerprint,
                         ),
                         initial_status="Outstanding",
                     )
@@ -68,16 +71,14 @@ def test_new_provider_sees_membership_committed_while_waiting_for_template_lock(
                         (template.checklist_template_id, definition["id"]),
                     )
                     await blocker.commit()
-                    saved = await asyncio.wait_for(pending, 5)
+                    with pytest.raises(ProviderTemplateConflict):
+                        await asyncio.wait_for(pending, 5)
                 finally:
                     await blocker.rollback()
                     if not pending.done():
                         pending.cancel()
                         await asyncio.gather(pending, return_exceptions=True)
-            assert [r.name for r in saved.requirements] == [
-                "Drug screening",
-                "Offer letter",
-            ]
+            assert await ProviderRepository(pool).list_providers() == []
 
     with disposable_database() as url:
         migrate_test_database(url)

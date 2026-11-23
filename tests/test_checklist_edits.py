@@ -10,7 +10,11 @@ from fastapi.testclient import TestClient
 
 from app import main
 from tests.database import configured_test_url, disposable_database
-from tests.fixtures.current_database import configure_catalog, provider_type_id
+from tests.fixtures.current_database import (
+    catalog_preview,
+    configure_catalog,
+    provider_type_id,
+)
 
 MANAGER = {"X-Demo-Role": "manager"}
 
@@ -78,6 +82,7 @@ def test_manual_save_records_before_after_and_independent_provider(
     client, seeded_provider
 ):
     original = client.get(f"/providers/{seeded_provider.id}").json()
+    preview = catalog_preview()
     new = client.post(
         "/providers",
         headers=MANAGER,
@@ -85,6 +90,8 @@ def test_manual_save_records_before_after_and_independent_provider(
             "creation_request_id": str(uuid4()),
             "name": "Dr. Avery Example",
             "provider_type_id": provider_type_id(),
+            "checklist_template_id": preview["checklist_template_id"],
+            "template_fingerprint": preview["template_fingerprint"],
         },
     ).json()
     row = requirement(client, new["id"])
@@ -342,6 +349,8 @@ def test_unfamiliar_verbatim_status_and_other_type_do_not_gain_dentist_rules(
             "creation_request_id": str(uuid4()),
             "name": "Other Fictional",
             "provider_type_id": type_id,
+            "checklist_template_id": catalog_preview(type_id)["checklist_template_id"],
+            "template_fingerprint": catalog_preview(type_id)["template_fingerprint"],
         },
     ).json()
     other = requirement(client, new["id"])

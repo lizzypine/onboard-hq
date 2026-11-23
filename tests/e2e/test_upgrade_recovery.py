@@ -180,6 +180,8 @@ def test_failed_legacy_lookup_can_be_checked_again_without_a_post(
     assert stored_attempt(page) == attempt
     page.unroute("**/providers?state=all")
     page.get_by_role("button", name="Check older save", exact=True).click()
-    expect(page.locator("#legacy-checklist-status")).to_contain_text("already saved")
+    expect(page.locator("#legacy-checklist-status")).to_contain_text(
+        "The current checklist and history are loaded."
+    )
     assert stored_attempt(page) is None
     assert posts == []

@@ -27,6 +27,8 @@ def output_for(scenario):
             date={"text": "on the 18th", "day": 18},
             supporting_text="Drug screening on the 18th.",
         )
+    if scenario == "additional":
+        drug.update(requirement="Orientation", supporting_text="Orientation completed.")
     if scenario == "failure":
         drug["proposed_status"] = " "
     if scenario == "html":
@@ -77,6 +79,7 @@ def main():
             "empty",
             "warning",
             "multiple",
+            "additional",
         ],
     )
     args = parser.parse_args()

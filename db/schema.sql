@@ -1,3 +1,7 @@
+--
+-- PostgreSQL database dump
+--
+
 \restrict dbmate
 
 -- Dumped from database version 18.6 (Homebrew)
@@ -69,9 +73,11 @@ CREATE FUNCTION public.preserve_requirement_owner() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    IF ROW(NEW.id,NEW.provider_id,NEW.checklist_template_id,NEW.requirement_definition_id)
-        IS DISTINCT FROM ROW(OLD.id,OLD.provider_id,OLD.checklist_template_id,OLD.requirement_definition_id) THEN
-        RAISE EXCEPTION 'Requirement ownership and membership are fixed.';
+    IF ROW(NEW.id,NEW.provider_id,NEW.checklist_template_id,NEW.requirement_definition_id,
+           NEW.initial_status,NEW.initial_scheduled_date,NEW.initial_deadline)
+        IS DISTINCT FROM ROW(OLD.id,OLD.provider_id,OLD.checklist_template_id,OLD.requirement_definition_id,
+                             OLD.initial_status,OLD.initial_scheduled_date,OLD.initial_deadline) THEN
+        RAISE EXCEPTION 'Requirement ownership, origin, and initial values are fixed.';
     END IF;
     RETURN NEW;
 END;
@@ -308,12 +314,16 @@ ALTER TABLE public.requirement_definitions ALTER COLUMN id ADD GENERATED ALWAYS 
 CREATE TABLE public.requirements (
     id integer NOT NULL,
     provider_id integer NOT NULL,
-    checklist_template_id integer NOT NULL,
+    checklist_template_id integer,
     requirement_definition_id integer NOT NULL,
     status text NOT NULL,
     scheduled_date date,
     deadline date,
     version integer DEFAULT 0 NOT NULL,
+    initial_status text,
+    initial_scheduled_date date,
+    initial_deadline date,
+    CONSTRAINT requirements_initial_values CHECK ((((checklist_template_id IS NOT NULL) AND (initial_status IS NULL) AND (initial_scheduled_date IS NULL) AND (initial_deadline IS NULL)) OR ((checklist_template_id IS NULL) AND (initial_status IS NOT NULL) AND (btrim(initial_status) <> ''::text)))),
     CONSTRAINT requirements_status_check CHECK ((btrim(status) <> ''::text)),
     CONSTRAINT requirements_version_check CHECK ((version >= 0))
 );
@@ -323,7 +333,7 @@ CREATE TABLE public.requirements (
 -- Name: TABLE requirements; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.requirements IS 'One row stores one provider''s progress on one assigned checklist requirement.';
+COMMENT ON TABLE public.requirements IS 'One row stores one provider''s progress on a standard or provider-only requirement.';
 
 
 --
@@ -915,11 +925,27 @@ ALTER TABLE ONLY public.requirements
 
 
 --
+-- Name: requirements requirements_definition_owner; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.requirements
+    ADD CONSTRAINT requirements_definition_owner FOREIGN KEY (requirement_definition_id) REFERENCES public.requirement_definitions(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: requirements requirements_provider_id_checklist_template_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.requirements
     ADD CONSTRAINT requirements_provider_id_checklist_template_id_fkey FOREIGN KEY (provider_id, checklist_template_id) REFERENCES public.providers(id, checklist_template_id) ON DELETE CASCADE;
+
+
+--
+-- Name: requirements requirements_provider_owner; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.requirements
+    ADD CONSTRAINT requirements_provider_owner FOREIGN KEY (provider_id) REFERENCES public.providers(id) ON DELETE CASCADE;
 
 
 --
@@ -1009,4 +1035,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20261111000100'),
     ('20261112000100'),
     ('20261114000100'),
-    ('20261115000100');
+    ('20261115000100'),
+    ('20261122000100');

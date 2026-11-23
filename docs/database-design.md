@@ -11,7 +11,9 @@ by [the generated schema](../db/schema.sql) and
 [the migration definitions](../db/migrations/). The first three migrations describe
 the former eight-table UUID/JSON schema; the fourth performs the coordinated
 integer-ID conversion, complete-checklist versioning, and normalized snapshots and
-warnings. Existing app workflows use that schema. The migration is not applied
+warnings. The fifth adds provider-only checklist rows and immutable initial
+values for creation recovery, retaining twelve tables. Existing app workflows use
+that schema. Migrations are not applied
 automatically; follow [the cutover runbook](database-cutover.md) for an existing
 database and obtain explicit authorization before changing Neon.
 
@@ -28,9 +30,10 @@ changes. No ORM is used; this document describes the model rather than defining 
 
 ## Design choices
 
-The **Provider creation walkthrough target** below extends this implemented model
-with creation-time provider-only requirements. It is a proposed schema change;
-the current twelve-table schema still requires template membership on every row.
+The **Provider creation walkthrough** below uses the same checklist model for
+standard rows and creation-time provider-only requirements. Schema availability
+in a deployed database must be verified with dbmate; committing or merging a
+migration does not apply it.
 
 - **Version complete checklists.** A checklist template row identifies one provider
   type and one `template_version`. Providers reference the version assigned at
@@ -86,8 +89,8 @@ no `retired_at` column is included in this target model.
 
 ## Entity relationship diagram
 
-This diagram shows the implemented relational model. Composite ownership
-constraints are specified separately below.
+This diagram shows the implemented relational model. Composite ownership and
+standard-row template-membership constraints are specified separately below.
 
 ```mermaid
 erDiagram
@@ -96,7 +99,7 @@ erDiagram
     requirement_definitions ||--o{ template_requirements : appears_in
     checklist_templates ||--o{ providers : assigned_to
     providers ||--o{ requirements : has_progress
-    template_requirements ||--o{ requirements : defines_item
+    requirement_definitions ||--o{ requirements : names_item
     providers ||--o{ updates : receives
     updates ||--o{ update_requirement_snapshots : captures
     requirements ||--o{ update_requirement_snapshots : captured_for
@@ -190,80 +193,79 @@ upgrades are not included. Archive/restore changes only the archive state.
 
 A creation retry with the same identity and same input returns the existing
 provider without resetting progress. Conflicting input under that identity fails.
-New-provider creation atomically assigns the selected type's current version and
-initializes an independent checklist with Outstanding statuses, empty dates and
-deadlines, and change counters of zero.
+New-provider creation checks the reviewed template ID and membership fingerprint
+against the selected type's current version, then atomically initializes an
+independent checklist. Standard rows start Outstanding with empty dates and
+deadlines; additions use the Manager's reviewed initial values. All new checklist
+change counters start at zero. A changed catalog requires another review before
+creation. Retry comparison uses original additional values rather than current
+progress, and succeeds after later progress/archive/catalog changes.
 
 ### 6. `requirements`
 
-One row stores one provider's progress on one assigned checklist requirement.
+One row stores one provider's progress on a standard or provider-only requirement.
 
 | Column | PostgreSQL type | Required | Default / constraint |
 | --- | --- | --- | --- |
 | `id` | `integer` | Yes | Identity primary key |
-| `provider_id` | `integer` | Yes | Part of the provider/version foreign key |
-| `checklist_template_id` | `integer` | Yes | Part of provider/version and membership foreign keys |
-| `requirement_definition_id` | `integer` | Yes | Part of the template membership foreign key |
-| `status` | `text` | Yes | Nonblank; creation supplies Outstanding |
-| `scheduled_date` | `date` | No | NULL; displayed as Requirement date |
+| `provider_id` | `integer` | Yes | Direct provider foreign key; also part of the standard provider/version foreign key |
+| `checklist_template_id` | `integer` | No | Non-NULL identifies a standard membership; NULL identifies a provider-only addition |
+| `requirement_definition_id` | `integer` | Yes | Direct definition foreign key; also part of standard template membership |
+| `status` | `text` | Yes | Nonblank; standard creation supplies Outstanding, additions use reviewed values |
+| `scheduled_date` | `date` | No | NULL; displayed as Expected completion date |
 | `deadline` | `date` | No | NULL |
 | `version` | `integer` | Yes | Default 0; nonnegative |
+| `initial_status` | `text` | Conditional | Nonblank and required for additions; NULL for standard rows; immutable |
+| `initial_scheduled_date` | `date` | No | Optional initial addition value; NULL for standard rows; immutable |
+| `initial_deadline` | `date` | No | Optional initial addition value; NULL for standard rows; immutable |
 
-The provider/version reference must match the provider's assigned version, and
-the version/definition pair must exist in `template_requirements`. The pair
+For standard rows, the provider/version reference must match the assigned version,
+and the version/definition pair must exist in `template_requirements`. Direct
+provider/definition references protect additions whose null template ID bypasses
+composite matching. A CHECK ties the presence of the initial-value receipt to row
+origin, and the ownership trigger preserves origin/identity and initial values.
+Later edits/reviews change current values and version only. The pair
 `(provider_id, requirement_definition_id)` is unique. Names come from the referenced
-definition through membership, never a copied name column.
+definition, never a copied name column.
 
 `version` is a checklist-item change counter for stale-write checks; it is not
 an independently versioned requirement template. Every real status, requirement-date,
 or deadline change increments it. Unapproved suggestions and unsaved drafts do
 not change progress. Dates and deadlines remain independent.
 
-### Provider creation walkthrough target
+### Provider creation walkthrough
 
-The scoped [Add Provider walkthrough design](superpowers/specs/2026-11-22-add-provider-walkthrough-design.md)
-allows a Manager to initialize provider-only requirements alongside the assigned
-standard checklist. Save requirement changes the modal draft only; final Add
-provider persists the provider, shared definitions as needed, and all checklist
-rows atomically. The existing column tables and ER diagram above describe the
-implemented schema; the following changes are a target, not an applied migration.
+The [Add Provider walkthrough design](superpowers/specs/2026-11-22-add-provider-walkthrough-design.md)
+is implemented through the existing twelve-table model. Save requirement changes
+only the modal draft; final Add provider atomically persists the provider, any
+new shared definitions, and the complete checklist. A definition cannot repeat
+within one provider after normalized-name comparison. Templates are never edited
+by provider creation, and no live per-requirement addition/removal interface is
+introduced.
 
-- Keep all rows in `requirements`. Make `checklist_template_id` nullable: non-null
-  rows retain standard provider/version and template-membership constraints;
-  null rows identify additions for that provider only. Do not modify templates or
-  reinterpret an existing standard row as an addition.
-- Add direct `provider_id REFERENCES providers(id) ON DELETE CASCADE` and
-  `requirement_definition_id REFERENCES requirement_definitions(id) ON DELETE
-  RESTRICT` relationships, because null additional-row template IDs bypass the
-  composite foreign keys. Keep both composite foreign keys and existing unique
-  constraints/indexes. The provider-leading unique index and definition index
-  also support the new direct relationships.
-- Add optional `initial_status text`, `initial_scheduled_date date`, and
-  `initial_deadline date`. A CHECK requires a nonblank initial_status for an
-  additional row, with optional initial dates. All three must be null for standard
-  rows. Extend the ownership trigger to keep origin/identity and initial values
-  immutable. These values preserve the original creation input for reliable retry
-  comparison after progress changes; no JSON receipt/list or new table is needed.
-- Existing records remain unchanged with null initial fields. Standard rows start
-  Outstanding with unset dates; additions start with the Manager's reviewed
-  status and optional dates. All new rows start at version 0.
-- Names reuse shared immutable definitions under the existing normalized name
-  uniqueness rule. An addition cannot repeat a standard or additional name within
-  its provider. Provider deletion cascades to owned rows/history and preserves
-  shared definitions. No live individual-requirement deletion is introduced.
-- Pin creation to the reviewed template identity and membership fingerprint;
-  catalog changes require another review. Equal UUID retries compare the original
-  profile/template and immutable additional inputs before consulting today's
-  catalog and never reset saved progress. The application keeps creation recovery
-  separate from later edits and review decisions.
+The nullable source and immutable initial columns above let initial creation input
+be reconstructed after later progress changes, without a JSON receipt or new
+table. Stored/captured models retain each row's immutable provenance. Provider
+deletion cascades to its additions and history, preserving shared definitions.
 
-The visible name of `scheduled_date` becomes **Expected completion date** with
-accessible explanatory help; its SQL/API name and stored values do not change.
-Unknown custom names use the agreed generic dropdown and completion rules only
-when their row is explicitly provider-only. Unknown standard requirements/types
-retain Needs review. Managed sign-in and other deferred lifecycle controls remain
-outside this target. Apply it only through a reviewed forward migration, with
-`DBMATE_NO_DUMP_SCHEMA=true`; no live migration is authorized by this document.
+Unconfigured provider-only rows offer Outstanding, Pending, Scheduled, Incomplete,
+Completed; Completed means finished and the other four mean unfinished. Known
+provider/name mappings retain their existing vocabulary. Unknown standard
+requirements/types and unfamiliar later statuses keep Needs review. Shared editing,
+analysis, independent suggestion review, and history apply to additional rows.
+
+Expected completion date names the existing scheduled_date field. Its optional
+calendar date stays distinct from deadline; accessible help explains the difference.
+The SQL/API name, saved values, and incomplete-date inference rules do not change.
+Initialization produces no fabricated update, suggestion, review, or manual-edit
+record. A submitted request is frozen for explicit Manager recovery in the same
+browser tab, including across reloads; a confirmed save reloads its current view.
+
+Apply migration five explicitly with DBMATE_NO_DUMP_SCHEMA=true before running
+the updated app against that database. Its intentionally empty down section does
+not reverse schema changes; rollback bookkeeping is not a downgrade procedure.
+The separately authorized live rollout uses a verified backup and matching app
+version. Managed sign-in and other deferred lifecycle controls remain outside scope.
 
 ### 7. `updates`
 
@@ -414,6 +416,8 @@ updates/deletes are prohibited, with the provider-deletion exception below.
 The composite keys below are intentional integrity constraints; they prevent a
 child from linking one provider's data to another provider or checklist version.
 All referenced column groups must be primary or unique keys.
+The two composite relationships on requirements apply to standard rows with a
+non-NULL template ID; direct provider/definition relationships protect every row.
 
 | Child columns | Referenced parent columns | Cardinality, parent to child | ON DELETE |
 | --- | --- | --- | --- |
@@ -421,6 +425,8 @@ All referenced column groups must be primary or unique keys.
 | `template_requirements.checklist_template_id` | `checklist_templates.id` | One to many | CASCADE |
 | `template_requirements.requirement_definition_id` | `requirement_definitions.id` | One to many | RESTRICT |
 | `providers.checklist_template_id` | `checklist_templates.id` | One to many | RESTRICT |
+| `requirements.provider_id` | `providers.id` | One to many; all rows | CASCADE |
+| `requirements.requirement_definition_id` | `requirement_definitions.id` | One to many; all rows | RESTRICT |
 | `requirements.(provider_id, checklist_template_id)` | `providers.(id, checklist_template_id)` | One to many | CASCADE |
 | `requirements.(checklist_template_id, requirement_definition_id)` | `template_requirements.(checklist_template_id, requirement_definition_id)` | One to many | RESTRICT |
 | `updates.provider_id` | `providers.id` | One to many | CASCADE |
@@ -558,7 +564,8 @@ account table or password-hash column to this twelve-table target. Current
 simulated roles are not real access control.
 
 Do not add real employee data, provider-profile editing, provider version upgrades,
-individual checklist exception controls, archive-event history, document uploads,
+post-creation requirement additions/removals or other checklist exceptions,
+archive-event history, document uploads,
 forwarded-email processing, automated reminders, policy retrieval/RAG, model
 routing, stored completion flags, or stored dashboard counts. Completion and
 Hawaii-date deadline monitoring stay derived from saved statuses and deadlines.

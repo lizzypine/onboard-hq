@@ -14,16 +14,23 @@ from app.provider_models import CreateProviderRequest
 from app.repository.providers import ProviderRepository
 from app.seed import INITIAL_STATUSES
 from tests.database import configured_test_url, disposable_database
-from tests.fixtures.current_database import configure_catalog, provider_type_id
+from tests.fixtures.current_database import (
+    catalog_preview,
+    configure_catalog,
+    provider_type_id,
+)
 
 MANAGER = {"X-Demo-Role": "manager"}
 
 
 def body(**changes):
+    preview = catalog_preview(changes.get("provider_type_id"))
     return {
         "creation_request_id": str(uuid4()),
         "name": "Dr. Avery Example",
         "provider_type_id": changes.get("provider_type_id") or provider_type_id(),
+        "checklist_template_id": preview["checklist_template_id"],
+        "template_fingerprint": preview["template_fingerprint"],
         "proposed_start_date": "2027-01-15",
         **changes,
     }
@@ -53,7 +60,10 @@ def test_catalog_and_creation_copy_the_selected_template(client, seeded_provider
     original = client.get(f"/providers/{seeded_provider.id}").json()
     catalog = client.get("/provider-types")
     assert catalog.status_code == 200
-    assert catalog.json() == [
+    metadata = {"template_fingerprint", "additional_statuses", "configured_statuses"}
+    assert [
+        {k: v for k, v in kind.items() if k not in metadata} for kind in catalog.json()
+    ] == [
         {
             "id": provider_type_id(),
             "checklist_template_id": seeded_provider.checklist_template_id,
@@ -61,6 +71,19 @@ def test_catalog_and_creation_copy_the_selected_template(client, seeded_provider
             "name": "Dentist",
             "requirements": sorted(INITIAL_STATUSES),
         }
+    ]
+    assert catalog.json()[0]["additional_statuses"] == [
+        "Outstanding",
+        "Pending",
+        "Scheduled",
+        "Incomplete",
+        "Completed",
+    ]
+    assert catalog.json()[0]["configured_statuses"]["offer letter"] == [
+        "Outstanding",
+        "Pending",
+        "Incomplete",
+        "Signed",
     ]
     result = create(client)
     assert result["name"] == "Dr. Avery Example"
