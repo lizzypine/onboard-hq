@@ -111,8 +111,10 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvi
     const sameProvider = pending && provider?.id === pending.providerId;
     notice.textContent = pending && !sameProvider
       ? "A checklist save needs confirmation for " + pending.providerName + ". Select that provider to recover it."
-      : message;
-    retry.hidden = !pending || !sameProvider || roleSelect.value !== "manager";
+      : pending && provider?.archived_at
+        ? "This checklist save is retained. Restore the provider before retrying the same save."
+        : message;
+    retry.hidden = !pending || !sameProvider || roleSelect.value !== "manager" || Boolean(provider.archived_at);
     retry.disabled = busy;
   }
 
@@ -125,7 +127,7 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvi
   }
 
   async function sendAttempt() {
-    if (busy || !pending || provider?.id !== pending.providerId || roleSelect.value !== "manager") return;
+    if (busy || !pending || provider?.id !== pending.providerId || provider.archived_at || roleSelect.value !== "manager") return;
     const attempt = pending;
     setBusy(true);
     message = "Saving checklist changes…";

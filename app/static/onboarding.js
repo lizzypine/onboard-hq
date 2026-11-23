@@ -2,9 +2,9 @@
 
 import {renderReviewControls} from "./review.js?v=4";
 import {providerLabel, setupProviderCreation} from "./providers.js?v=4";
-import {setupChecklist} from "./checklist.js?v=4";
+import {setupChecklist} from "./checklist.js?v=5";
 import {setupDateHelp} from "./date-help.js?v=4";
-import {setupProviderLifecycle} from "./provider-lifecycle.js?v=1";
+import {setupProviderLifecycle} from "./provider-lifecycle.js?v=2";
 
 setupDateHelp();
 
@@ -51,7 +51,9 @@ function setBusy(value) {
   roleSelect.disabled = value;
   refreshButton.disabled = value;
   submitButton.disabled = value || !state.provider || Boolean(state.provider.archived_at);
-  document.querySelectorAll(".review-fields").forEach(element => { element.disabled = value; });
+  document.querySelectorAll(".review-fields").forEach(element => {
+    element.disabled = value || !state.provider || Boolean(state.provider.archived_at);
+  });
   creation?.setBusy(value);
   checklist?.setBusy(value);
   lifecycle?.setBusy(value);
@@ -276,11 +278,15 @@ lifecycle = setupProviderLifecycle({api, roleSelect, setBusy, onChanged: async p
 }, onUnavailable: (id, archived) => {
   document.getElementById("provider-state").value = archived ? "archived" : "active";
   state.preferredProviderId = id;
+  updateText.value = "";
+  state.pending = null;
+  disclosure.open = false;
   providerSelect.replaceChildren();
   clearSnapshot();
 }});
 roleSelect.addEventListener("change", () => { renderHistory(); creation.syncRole(); checklist.syncRole(); lifecycle.syncRole(); });
 function changeProviderSelection() {
+  lifecycle.clearRecovery();
   state.preferredProviderId = null;
   updateText.value = "";
   state.pending = null;
@@ -288,7 +294,11 @@ function changeProviderSelection() {
   initialize();
 }
 providerSelect.addEventListener("change", changeProviderSelection);
-refreshButton.addEventListener("click", async () => { await initialize(); await checklist.recoverLegacy(); });
+refreshButton.addEventListener("click", async () => {
+  if (await lifecycle.refresh()) return;
+  await initialize();
+  await checklist.recoverLegacy();
+});
 initialize().then(() => checklist.recoverLegacy());
 
 document.getElementById("provider-state").addEventListener("change", changeProviderSelection);

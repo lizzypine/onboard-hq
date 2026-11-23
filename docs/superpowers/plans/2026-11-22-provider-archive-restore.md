@@ -51,7 +51,7 @@
 
 **Interfaces:**
 - Consumes `lock_provider(conn, provider_id)`, `fetch_provider(conn, provider_id)`, `require_active(provider)`, and existing coherent `initialize(id)`/`clearSnapshot()` browser operations.
-- Produces `ProviderLifecycleRepository.set_archived(provider_id: int, archived: bool) -> StoredProvider`, `change_archive_state(repository, provider_id, archived, role) -> StoredProvider`, and `setupProviderLifecycle({api, roleSelect, setBusy, onChanged, onUnavailable})` with `render(provider)`, `setBusy(value)`, and `syncRole()`.
+- Produces `ProviderLifecycleRepository.set_archived(provider_id: int, archived: bool) -> StoredProvider`, `change_archive_state(repository, provider_id, archived, role) -> StoredProvider`, and `setupProviderLifecycle({api, roleSelect, setBusy, onChanged, onUnavailable})` with `render(provider)`, `setBusy(value)`, `syncRole()`, provider-bound read-only `refresh()`, and `clearRecovery()` for explicit selection changes.
 
 - [ ] Write unit/API tests for Manager/default/invalid role, missing/invalid IDs, repeated/concurrent desired states, archived read/write behavior, and exact graph/template/additional-row/history preservation after restore. Test missing configuration/schema safely.
 - [ ] Write an observed PostgreSQL provider-lock race test and browser tests for archive confirmation/cancel, restore and restart, original progress, role visibility, last-provider list transitions, double click, lost responses, failed refresh, and recovery without duplicate writes.

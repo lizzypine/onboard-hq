@@ -527,6 +527,13 @@ are unavailable, clear stale editable data and offer Refresh data. Retain existi
 frozen creation/manual-save recovery records. Lifecycle event history remains
 outside scope.
 
+Refresh after an unavailable lifecycle save reads that provider by ID before
+choosing its actual Active/Archived view; it must not silently select a different
+provider. Clear unsent update text while the original provider is unavailable.
+Keep archived suggestion controls disabled through refresh. Hide and guard manual
+save retries while archived, retaining the frozen operation through reload so
+Restore can recover the same original save identity without duplicating history.
+
 ## Reduced synthetic example
 
 These selected rows illustrate version references only. They do not redefine the

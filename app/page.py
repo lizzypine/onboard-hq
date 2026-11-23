@@ -106,7 +106,7 @@ PAGE = """<!doctype html>
       .monitoring-counts { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
-  <script src="/static/onboarding.js?v=5" type="module"></script>
+  <script src="/static/onboarding.js?v=6" type="module"></script>
 </head>
 <body>
 <main>

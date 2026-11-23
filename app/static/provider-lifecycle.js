@@ -4,7 +4,7 @@ export function setupProviderLifecycle({api, roleSelect, setBusy, onChanged, onU
   const archive = document.getElementById("archive-provider");
   const restore = document.getElementById("restore-provider");
   const status = document.getElementById("provider-lifecycle-status");
-  let provider = null, busy = false, working = false, message = "";
+  let provider = null, busy = false, working = false, message = "", pendingRead = null;
 
   function sync() {
     const manager = roleSelect.value === "manager";
@@ -37,6 +37,7 @@ export function setupProviderLifecycle({api, roleSelect, setBusy, onChanged, onU
         actual = await api("/providers/" + target.id);
       }
       const loaded = await onChanged(actual);
+      pendingRead = null;
       const current = loaded.archived_at ? "archived" : "active";
       message = confirmed && Boolean(loaded.archived_at) === archived
         ? "Provider " + verb + ". "
@@ -44,6 +45,7 @@ export function setupProviderLifecycle({api, roleSelect, setBusy, onChanged, onU
       message += "Current checklist and history loaded.";
       document.getElementById("provider").focus();
     } catch {
+      pendingRead = {id: target.id, archived};
       onUnavailable(target.id, archived);
       message = confirmed ? "Provider " + verb + ", but the saved view could not load. Use Refresh data."
         : "The " + action + " could not be confirmed. Use Refresh data and check Active or Archived before trying again.";
@@ -56,14 +58,43 @@ export function setupProviderLifecycle({api, roleSelect, setBusy, onChanged, onU
 
   archive.addEventListener("click", () => change(true));
   restore.addEventListener("click", () => change(false));
+
+  async function refresh() {
+    if (!pendingRead) return false;
+    if (busy || working) return true;
+    const target = pendingRead;
+    working = true;
+    setBusy(true);
+    message = "Checking this provider's saved state…";
+    sync();
+    try {
+      const actual = await api("/providers/" + target.id);
+      const loaded = await onChanged(actual);
+      pendingRead = null;
+      message = "Current provider state is " + (loaded.archived_at ? "archived" : "active") + ". Current checklist and history loaded.";
+      document.getElementById("provider").focus();
+    } catch {
+      onUnavailable(target.id, target.archived);
+      message = "This provider's current state is unavailable. Use Refresh data before continuing.";
+    } finally {
+      working = false;
+      setBusy(false);
+      sync();
+    }
+    return true;
+  }
+
   const controller = {
     render(nextProvider) {
       if (!working && provider?.id !== nextProvider?.id) message = "";
+      if (!working && nextProvider) pendingRead = null;
       provider = nextProvider;
       sync();
     },
     setBusy(value) { busy = value; sync(); },
     syncRole() { sync(); },
+    refresh,
+    clearRecovery() { pendingRead = null; message = ""; sync(); },
   };
   sync();
   return controller;
