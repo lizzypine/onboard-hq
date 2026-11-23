@@ -93,7 +93,7 @@ export function setupDateHelp() {
     }
   }, true);
   document.addEventListener("close", event => { if (event.target.tagName === "DIALOG") hide(); }, true);
-  window.addEventListener("resize", hide);
+  window.addEventListener("resize", position);
   document.addEventListener("scroll", position, true);
   document.querySelectorAll("[data-date-help]").forEach(addDateHelp);
 }

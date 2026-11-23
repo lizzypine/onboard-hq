@@ -37,6 +37,30 @@ def test_expected_date_help_fits_mobile_and_can_be_toggled(page, app_server):
     expect(tooltip).to_be_hidden()
 
 
+def test_hover_then_keyboard_focus_keeps_the_same_help_open(page, app_server):
+    page.goto(app_server.url)
+    button = page.get_by_role("button", name="About expected completion date").first
+    button.hover()
+    expect(page.get_by_role("tooltip")).to_be_visible()
+    button.focus()
+    page.evaluate("new Promise(resolve => requestAnimationFrame(resolve))")
+    expect(button).to_be_focused()
+    expect(page.get_by_role("tooltip")).to_be_visible()
+
+
+def test_late_viewport_resize_repositions_focused_help_without_closing_it(
+    page, app_server
+):
+    page.goto(app_server.url)
+    button = page.get_by_role("button", name="About expected completion date").first
+    button.focus()
+    expect(page.get_by_role("tooltip")).to_be_visible()
+    page.evaluate("window.dispatchEvent(new Event('resize'))")
+    page.evaluate("new Promise(resolve => requestAnimationFrame(resolve))")
+    expect(button).to_be_focused()
+    expect(page.get_by_role("tooltip")).to_be_visible()
+
+
 def test_expected_date_wording_and_help_in_editor_review_and_history(page, app_server):
     group = open_editor(page, app_server)
     field = group.get_by_label("Expected completion date", exact=True)

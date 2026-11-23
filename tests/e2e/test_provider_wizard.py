@@ -4,6 +4,7 @@ import pytest
 from playwright.sync_api import expect
 
 from tests.database import ROOT
+from tests.e2e.test_checklist_edits import open_history, row, save_editor
 from tests.fixtures.current_database import configure_catalog
 
 
@@ -298,3 +299,88 @@ def test_fast_double_submit_creates_only_one_provider(page, app_server):
             route.continue_()
     expect(dialog).to_be_hidden()
     assert len(page.request.get(app_server.url + "/providers").json()) == 2
+
+
+def test_skip_start_date_clears_an_incomplete_date_without_guessing(page, app_server):
+    dialog = open_wizard(page, app_server)
+    dialog.get_by_label("Provider name", exact=True).fill("Dr. Optional Start Example")
+    dialog.locator("#save-provider").click()
+    dialog.get_by_label("Provider type", exact=True).select_option(index=1)
+    dialog.locator("#save-provider").click()
+    field = dialog.get_by_label("Proposed start date", exact=True)
+    field.fill("2026-12-10")
+    field.focus()
+    field.press("Home")
+    field.press("Delete")
+    assert field.evaluate("input => input.validity.badInput")
+    dialog.get_by_role("button", name="Skip for now", exact=False).click()
+    expect(
+        dialog.get_by_role("table", name="New provider checklist preview")
+    ).to_be_visible()
+    saved = save_provider(page, app_server, dialog)
+    assert saved["proposed_start_date"] is None
+
+
+def test_saved_addition_manual_edit_analysis_and_approval_survive_restart(
+    page, app_server, seeded_provider
+):
+    original = page.request.get(
+        app_server.url + f"/providers/{seeded_provider.id}"
+    ).json()
+    dialog = requirements_step(page, app_server)
+    edit_addition(dialog, "Orientation", "Scheduled").get_by_role(
+        "button", name="Save requirement", exact=True
+    ).click()
+    edit_addition(dialog, "IT access", "Completed", "").get_by_role(
+        "button", name="Save requirement", exact=True
+    ).click()
+    saved = save_provider(page, app_server, dialog)
+    row(page, "Orientation").get_by_role("button", name="Edit", exact=True).click()
+    group = page.get_by_role("group", name="Edit Orientation", exact=True)
+    group.get_by_role("combobox", name="Checklist status", exact=True).select_option(
+        "Pending"
+    )
+    save_editor(page, group)
+    expect(row(page, "Orientation")).to_contain_text("Pending")
+    app_server.restart("additional")
+    page.reload()
+    page.get_by_label("Provider", exact=True).select_option(str(saved["id"]))
+    page.get_by_label("Original update", exact=True).fill("Orientation completed.")
+    page.get_by_role("button", name="Analyze update", exact=True).click()
+    open_history(page)
+    card = page.get_by_role("article", name="Orientation", exact=True)
+    expect(card).to_contain_text("Orientation completed.")
+    expect(row(page, "Orientation")).to_contain_text("Pending")
+    page.get_by_label("Simulated role", exact=True).select_option("manager")
+    card.get_by_role("button", name="Approve", exact=True).click()
+    expect(card).to_contain_text("Approved")
+    expect(row(page, "Orientation")).to_contain_text("Completed")
+    expect(page.locator("#count-finished")).to_have_text("2")
+    assert (
+        page.request.get(app_server.url + f"/providers/{seeded_provider.id}").json()
+        == original
+    )
+    history = page.request.get(
+        app_server.url + f"/providers/{saved['id']}/updates"
+    ).json()
+    captured = next(
+        item
+        for item in history[0]["provider_snapshot"]["requirements"]
+        if item["name"] == "Orientation"
+    )
+    assert (
+        captured["checklist_template_id"] is None
+        and captured["status"] == "Pending"
+        and captured["version"] == 1
+    )
+    app_server.restart()
+    page.reload()
+    page.get_by_label("Provider", exact=True).select_option(str(saved["id"]))
+    expect(row(page, "Orientation")).to_contain_text("Completed")
+    open_history(page)
+    expect(
+        page.get_by_role("article", name="Manager checklist edit: Orientation")
+    ).to_be_visible()
+    expect(page.get_by_role("article", name="Orientation", exact=True)).to_contain_text(
+        "Approved"
+    )

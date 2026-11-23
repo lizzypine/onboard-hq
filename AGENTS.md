@@ -8,7 +8,7 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 
 - Use synthetic provider records and administrative updates only. Version one excludes real employee records, forwarded-email processing, document uploads, and automated reminders.
 - Load the selected provider's current requirements and statuses before interpreting an update. Do not automatically add a requirement that does not apply to that provider type.
-- Account for multiple provider types, such as Dentist and Dental Hygienist. Separate type-specific requirement templates from each provider's actual checklist; template changes must not silently change existing checklists. Creation-time provider-only additions are designed in `docs/superpowers/specs/2026-11-22-add-provider-walkthrough-design.md` and the target section of `docs/database-design.md`; they are not implemented yet. Other checklist exceptions and post-creation addition/removal controls remain outside scope.
+- Account for multiple provider types, such as Dentist and Dental Hygienist. Separate type-specific requirement templates from each provider's actual checklist; template changes must not silently change existing checklists. Manager creation supports provider-only additions through the reviewed five-step modal described in `docs/superpowers/specs/2026-11-22-add-provider-walkthrough-design.md` and `docs/database-design.md`. Save requirement changes only its browser draft; final Add provider saves the whole checklist atomically. Standard rows retain their assigned membership; additions never alter templates. Other checklist exceptions and post-creation addition/removal controls remain outside scope.
 - Present each suggestion with the original update and supporting text. Users must be able to approve, correct, or reject suggestions independently; only approved changes may update requirement statuses or dates. Retain original updates, suggestions, and review decisions in persistent storage.
 - Use the **Sample Input Set** and **Three Acceptance Criteria** in `docs/proposal.md` when implementing and testing extraction. Include relative dates ("next Tuesday"), corrections ("actually the drug screen moved to the 29th"), and status reversals (credentialing returned for missing information becomes Incomplete). Flag ambiguous dates and keep corrections subject to human approval.
 - Follow **Data Use > Incomplete Dates** in `docs/proposal.md` for date resolution: incomplete dates are anchored to the proposed start date, and unsupported wording produces a warning with no guessed date. The revised PDF's references to today's date and the upcoming month do not override this policy; resolve those differences in the spec before extending date handling.
@@ -25,7 +25,10 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 
 - `app/main.py`: routes, dependency/lifecycle wiring, and HTTP error mapping. No business rules.
 - `app/page.py`: page markup; `app/static/onboarding.js`: coherent provider selection/loading, creation recovery, history display, and saved-review orchestration.
-- `app/static/providers.js`: manager creation form, configured-template preview, stable save identity, and duplicate-name labels. No analysis or review calls.
+- `app/static/providers.js`: Manager creation/catalog requests, frozen save recovery, coherent selection callbacks, and duplicate-name labels. No analysis or review calls.
+- `app/static/provider-wizard.js` and `app/static/provider-wizard.css`: native five-step modal, per-item additional requirement drafts, final review, and scoped layout. No HTTP/storage/model calls.
+- `app/static/provider-recovery.js`: validated frozen creation requests in sessionStorage; no HTTP/model calls or automatic replay.
+- `app/static/date-help.js`: shared Expected completion date explanation on hover/focus/tap, scoped to the active dialog when open; SQL/API fields remain named scheduled_date.
 - `app/static/checklist.js`: saved checklist rows, status badges, one Manager edit draft, and frozen manual-save recovery. No provider/history loading or model calls.
 - `app/static/checklist-recovery.js`: validate frozen UUID-era drafts and read saved history by retained retry keys; no save POSTs or model calls. The checklist controller clears resolved drafts only after a coherent saved view loads.
 - `app/static/statuses.js`: safe native status dropdown and labeled badge DOM helpers; choices and tones come from the dashboard.
@@ -38,14 +41,16 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 - `app/checklist_models.py`: direct checklist edit request/audit records and derived dropdown option contracts, separate from stored LLM evidence.
 - `app/checklist.py`: Manager-only direct-edit orchestration; no HTTP/model calls.
 - `app/rules/checklist.py`: pure direct-save role, version, status, no-op, and retry identity rules.
-- `app/rules/statuses.py`: shared synthetic status choices, completion classification, and badge tones; unknown types retain Needs review.
+- `app/rules/statuses.py`: shared synthetic/provider-only status choices, completion classification, and badge tones; unknown standard requirements/types retain Needs review. Unconfigured provider-only rows use the generic vocabulary with Completed meaning finished.
 - `app/repository/checklist.py`: locked atomic checklist edits with append-only retryable audit history.
 - `app/providers.py`: manager-only provider creation orchestration; no HTTP or model calls.
-- `app/rules/providers.py`: pure creation authorization, initialization defaults, and reused-identity rules.
+- `app/rules/providers.py`: pure creation authorization, reviewed-template/addition validation, defaults, and immutable creation retry comparison.
+- `app/rules/catalog.py`: pure normalized catalog names and reviewed-template membership fingerprints.
 - `app/monitoring_models.py`: derived dashboard contracts, separate from stored provider/context snapshots.
 - `app/monitoring.py`: Hawaii clock boundary and dashboard loading from one saved provider/checklist read.
 - `app/rules/monitoring.py`: pure completion, deadline, and count rules with an explicit as-of date. No clock or I/O.
 - `app/repository/catalog.py`: immutable complete-checklist version configuration for seeds/tests; normalized names, no administration route.
+- `app/repository/provider_creation.py`: immutable creation receipt reconstruction, provider/checklist insertions, and additional definition resolution within the caller's transaction.
 - `app/repository/snapshots.py`: save and reconstruct relational captured requirement state within the caller's transaction.
 - `app/rules/provider_state.py`: pure archived-state write guard; archived records remain viewable.
 - `app/repository/providers.py`: PostgreSQL provider/type reads and atomic template-based checklist initialization with creation retry identities; the provider/checklist SELECT is in `db/queries.py`. Repository transaction helpers are in `app/repository/__init__.py`.

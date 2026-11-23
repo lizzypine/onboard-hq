@@ -159,7 +159,7 @@ export function createProviderWizard({dialog, onSubmit, onCancel}) {
     heading("When do they plan to start?", "Leave this blank if the proposed start date hasn’t been confirmed.");
     const entry = text(content, "div", "", "provider-entry");
     input(entry, "Proposed start date", "new-provider-start", draft.start, "date", value => { draft.start = value || null; });
-    button(entry, "Skip for now →", () => { draft.start = null; advance(); });
+    button(entry, "Skip for now →", () => { draft.start = null; entry.querySelector("input").value = ""; advance(); });
   }
 
   function focusExtra() { content.querySelector("#additional-requirement-name")?.focus(); }
