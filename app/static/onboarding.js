@@ -2,7 +2,7 @@
 
 import {renderReviewControls} from "./review.js?v=4";
 import {providerLabel, setupProviderCreation} from "./providers.js?v=4";
-import {setupChecklist} from "./checklist.js?v=5";
+import {setupChecklist} from "./checklist.js?v=6";
 import {setupDateHelp} from "./date-help.js?v=4";
 import {setupProviderLifecycle} from "./provider-lifecycle.js?v=2";
 
@@ -15,6 +15,7 @@ const refreshButton = document.getElementById("refresh-data");
 const updateText = document.getElementById("update-text");
 const status = document.getElementById("request-status");
 const results = document.getElementById("review-results");
+const pendingDetails = new Map();
 const state = {provider: null, monitoring: null, history: [], edits: [], checklistOptions: [], busy: false, generation: 0, pending: null, preferredProviderId: null};
 let creation = null;
 let checklist = null;
@@ -104,16 +105,18 @@ async function decide(suggestion, body) {
   } finally { setBusy(false); }
 }
 
-function renderSuggestion(parent, suggestion, completed) {
+function renderSuggestion(parent, suggestion, completed, update = null) {
   const card = text(parent, "article", "");
   card.className = "suggestion";
   card.setAttribute("aria-label", suggestion.requirement);
   text(card, "h4", suggestion.requirement);
+  if (update) renderUpdateEvidence(card, update, "h5");
   const canReview = !suggestion.decision && completed && roleSelect.value === "manager";
   if (!canReview) {
     text(card, "p", "Proposed status: " + suggestion.proposed_status);
     text(card, "p", "Proposed date: " + (suggestion.proposed_date || "Not specified"));
   }
+  text(card, "h5", "Supporting text");
   text(card, "blockquote", suggestion.supporting_text);
   if (suggestion.date_text) text(card, "p", "Original date wording: " + suggestion.date_text);
   if (suggestion.date_explanation) text(card, "p", "Original inference: " + suggestion.date_explanation);
@@ -132,10 +135,34 @@ function renderSuggestion(parent, suggestion, completed) {
   } else text(card, "p", completed ? "Awaiting manager review." : "Analysis is unfinished; this cannot be reviewed.");
 }
 
-function renderHistory() {
+function renderUpdateEvidence(parent, update, heading = "h3") {
+  text(parent, heading, "Original update");
+  text(parent, "blockquote", update.update_text);
+  text(parent, "p", "Submitted: " + new Date(update.created_at).toLocaleString());
+  text(parent, "p", update.processing_state === "processing" ? "Analysis unfinished. No checklist changes were applied." : update.message);
+  if (update.ambiguities.length) {
+    text(parent, heading, "Warnings and ambiguities");
+    const list = text(parent, "ul", "");
+    update.ambiguities.forEach(warning => text(list, "li", warning));
+  }
+}
+
+function renderPendingSuggestion(suggestion, update) {
+  let container = pendingDetails.get(suggestion.requirement_id);
+  if (!container) {
+    container = document.createElement("div");
+    container.className = "requirement-suggestion-content";
+    text(container, "h3", "Pending suggestions");
+    pendingDetails.set(suggestion.requirement_id, container);
+  }
+  renderSuggestion(container, suggestion, true, update);
+}
+
+function renderReviews() {
   results.replaceChildren();
+  pendingDetails.clear();
   const pending = state.history.reduce((count, update) => count + (update.processing_state === "completed" ? update.suggestions.filter(s => !s.decision).length : 0), 0);
-  document.getElementById("pending-suggestions").textContent = pending + " pending suggestion" + (pending === 1 ? "" : "s") + (state.edits.length ? " · " + state.edits.length + " checklist edit" + (state.edits.length === 1 ? "" : "s") : "");
+  document.getElementById("pending-suggestions").textContent = pending + " pending suggestion" + (pending === 1 ? "" : "s");
   if (!state.history.length && !state.edits.length) text(results, "p", "No saved updates yet.");
   const entries = [...state.history.map(record => ({kind: "update", record})), ...state.edits.map(record => ({kind: "edit", record}))]
     .sort((a, b) => Date.parse(b.record.created_at) - Date.parse(a.record.created_at) || b.kind.localeCompare(a.kind) || b.record.id - a.record.id);
@@ -144,16 +171,13 @@ function renderHistory() {
     const update = entry.record;
     const group = text(results, "div", "");
     group.className = "update";
-    text(group, "h3", "Original update");
-    text(group, "blockquote", update.update_text);
-    text(group, "p", "Submitted: " + new Date(update.created_at).toLocaleString());
-    text(group, "p", update.processing_state === "processing" ? "Analysis unfinished. No checklist changes were applied." : update.message);
-    if (update.ambiguities.length) {
-      text(group, "h4", "Warnings and ambiguities");
-      const list = text(group, "ul", "");
-      update.ambiguities.forEach(warning => text(list, "li", warning));
-    }
-    update.suggestions.forEach(suggestion => renderSuggestion(group, suggestion, update.processing_state === "completed"));
+    renderUpdateEvidence(group, update);
+    const completed = update.processing_state === "completed";
+    if (completed && update.suggestions.some(s => !s.decision)) text(group, "p", "Pending suggestions are shown in the Onboarding checklist.");
+    update.suggestions.forEach(suggestion => {
+      if (completed && !suggestion.decision) renderPendingSuggestion(suggestion, update);
+      else renderSuggestion(group, suggestion, completed);
+    });
   }
 }
 
@@ -179,8 +203,8 @@ async function loadState() {
   state.history = history;
   state.edits = edits;
   state.checklistOptions = dashboard.checklist_options;
+  renderReviews();
   renderChecklist();
-  renderHistory();
   checklist?.onSnapshotLoaded(state.edits);
 }
 
@@ -191,8 +215,8 @@ function clearSnapshot() {
   state.history = [];
   state.edits = [];
   state.checklistOptions = [];
+  renderReviews();
   renderChecklist();
-  renderHistory();
 }
 
 async function initialize(preferredId = state.preferredProviderId) {
@@ -232,11 +256,14 @@ document.getElementById("update-form").addEventListener("submit", async event =>
   status.textContent = "Analyzing update…";
   let saved = false;
   try {
-    await api("/updates/analyze", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({provider_id: state.provider.id, request_id: state.pending.id, update_text: bodyText})});
+    const analyzed = await api("/updates/analyze", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({provider_id: state.provider.id, request_id: state.pending.id, update_text: bodyText})});
     saved = true;
     await loadState();
     state.pending = null;
-    status.textContent = "Update and suggestions saved. Open Suggestions and review history to review pending suggestions.";
+    const hasPending = state.history.some(update => update.id === analyzed.id && update.processing_state === "completed" && update.suggestions.some(s => !s.decision));
+    status.textContent = hasPending
+      ? "Update and suggestions saved. Review pending suggestions beneath their requirements in the Onboarding checklist."
+      : "Update saved. No pending suggestions from this update. Open Review history for the saved result and any warnings.";
   } catch (error) {
     if (error.savedUpdateId) state.pending = null;
     if (!saved) {
@@ -247,7 +274,8 @@ document.getElementById("update-form").addEventListener("submit", async event =>
 });
 
 updateText.addEventListener("input", () => { state.pending = null; });
-checklist = setupChecklist({api, roleSelect, setBusy, onSaved: loadState, onLegacyProvider: async provider => {
+checklist = setupChecklist({api, roleSelect, setBusy, onSaved: loadState,
+  requirementDetails: requirement => pendingDetails.get(requirement.id), onLegacyProvider: async provider => {
   document.getElementById("provider-state").value = provider.archived_at ? "archived" : "active";
   state.preferredProviderId = provider.id;
   if (!await initialize(provider.id) || state.provider?.id !== provider.id) throw new Error("Saved view unavailable.");
@@ -284,7 +312,7 @@ lifecycle = setupProviderLifecycle({api, roleSelect, setBusy, onChanged: async p
   providerSelect.replaceChildren();
   clearSnapshot();
 }});
-roleSelect.addEventListener("change", () => { renderHistory(); creation.syncRole(); checklist.syncRole(); lifecycle.syncRole(); });
+roleSelect.addEventListener("change", () => { renderReviews(); creation.syncRole(); checklist.syncRole(); lifecycle.syncRole(); });
 function changeProviderSelection() {
   lifecycle.clearRecovery();
   state.preferredProviderId = null;

@@ -126,7 +126,7 @@ still run without a database, for example `uv run pytest tests/test_dates.py`.
 
 ## What this feature does
 
-Select the fictional provider and enter a synthetic update in Proposer or Manager
+Select the fictional provider and enter a synthetic update in Non-manager or Manager
 mode. The model extracts proposed changes and supporting text. The original update,
 provider context, suggestions, and warnings are saved. Unknown requirements appear
 as warnings, and empty extraction is retained as insufficient information.
@@ -136,11 +136,17 @@ or reject each suggestion independently. Only approved changes update the checkl
 Original proposals remain visible alongside the decision and its applied values.
 This role switch demonstrates permissions and does not authenticate a person.
 
-The **Updates** section accepts free-text updates. **Suggestions and review history**
-starts closed; choose its heading to open or close it. The visible pending count
-shows suggestions waiting for a decision. Analysis points you there without opening
-the section automatically. Normal refreshes and saved decisions preserve your
-choice; changing providers or reloading the page starts it closed again.
+The **Updates** section accepts free-text updates. Pending suggestions appear directly
+beneath their matching requirements in the **Onboarding checklist**, with the original
+update, supporting text, and warnings. The checklist's pending count shows suggestions
+waiting for a decision; saved checklist values change only after approval. Multiple
+proposals for one requirement remain separate, newest first.
+
+**Review history** retains original updates, completed decisions, and manual checklist
+edits. It starts closed; choose its heading to open or close it. Normal refreshes
+and saved decisions preserve your choice; changing providers or reloading the page
+starts it closed again. The visible Non-manager role uses the existing internal
+`proposer` API value and has the same permissions.
 
 The striped checklist has colored, labeled status badges. Green means a recognized
 finished status; blue is Pending, Scheduled, or Submitted; amber is Outstanding or

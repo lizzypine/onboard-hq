@@ -50,7 +50,7 @@ def counts(page, finished=2, remaining=3, overdue=1, needs_review=0):
 def indicator(page, name="Drug screening"):
     return (
         page.get_by_role("table", name="Onboarding checklist")
-        .get_by_role("row")
+        .locator("#requirements > .requirement-row")
         .filter(has_text=name)
         .get_by_role("cell")
         .nth(4)

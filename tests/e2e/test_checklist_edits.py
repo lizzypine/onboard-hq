@@ -87,10 +87,10 @@ def test_disclosure_defaults_pending_counts_and_provider_switch(
     assert not history(page).evaluate("e => e.open")
     page.get_by_label("Original update", exact=True).fill("Drug screening completed.")
     page.get_by_role("button", name="Analyze update", exact=True).click()
-    expect(history(page).locator("summary")).to_contain_text("1 pending suggestion")
+    expect(page.locator("#pending-suggestions")).to_contain_text("1 pending suggestion")
     assert not history(page).evaluate("e => e.open")
     expect(page.locator("#request-status")).to_contain_text(
-        "Suggestions and review history"
+        "Onboarding checklist"
     )
     summary = history(page).locator("summary")
     summary.focus()
@@ -103,7 +103,7 @@ def test_disclosure_defaults_pending_counts_and_provider_switch(
     assert history(page).evaluate("e => e.open")
     page.get_by_label("Simulated role", exact=True).select_option("manager")
     page.get_by_role("button", name="Approve", exact=True).click()
-    expect(history(page).locator("summary")).to_contain_text("0 pending suggestions")
+    expect(page.locator("#pending-suggestions")).to_contain_text("0 pending suggestions")
     assert history(page).evaluate("e => e.open")
     other = second_provider(page, app_server)
     page.get_by_role("button", name="Refresh data", exact=True).click()
@@ -305,7 +305,7 @@ def test_deadline_only_save_stales_suggestion_and_updates_monitoring(page, app_s
     load(page, app_server)
     page.get_by_label("Original update", exact=True).fill("Drug screening completed.")
     page.get_by_role("button", name="Analyze update", exact=True).click()
-    expect(history(page).locator("summary")).to_contain_text("1 pending suggestion")
+    expect(page.locator("#pending-suggestions")).to_contain_text("1 pending suggestion")
     page.get_by_label("Simulated role", exact=True).select_option("manager")
     row(page).get_by_role("button", name="Edit", exact=True).click()
     group = editor(page)
@@ -340,7 +340,7 @@ def test_unfamiliar_current_and_proposed_values_are_safe_dropdown_options(
     )
     page.get_by_label("Original update", exact=True).fill("Drug screening completed.")
     page.get_by_role("button", name="Analyze update", exact=True).click()
-    expect(history(page).locator("summary")).to_contain_text("1 pending suggestion")
+    expect(page.locator("#pending-suggestions")).to_contain_text("1 pending suggestion")
     with psycopg.connect(configured_test_url()) as conn:
         conn.execute(
             "UPDATE suggestions SET proposed_status=%s WHERE provider_id=%s",
@@ -409,7 +409,7 @@ def test_review_saves_verbatim_status_options(
     load(page, app_server)
     page.get_by_label("Original update", exact=True).fill("Drug screening completed.")
     page.get_by_role("button", name="Analyze update", exact=True).click()
-    expect(history(page).locator("summary")).to_contain_text("1 pending suggestion")
+    expect(page.locator("#pending-suggestions")).to_contain_text("1 pending suggestion")
     if preserved_source == "proposed":
         with psycopg.connect(configured_test_url()) as conn:
             conn.execute(
