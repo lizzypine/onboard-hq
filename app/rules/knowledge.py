@@ -1,0 +1,56 @@
+"""Pure authorization, concurrency and retry checks for source management."""
+
+import hashlib
+
+from pydantic import BaseModel
+
+from app.knowledge_models import EmbeddingSpace, KnowledgeVersion
+
+
+class KnowledgeForbidden(ValueError):
+    pass
+
+
+class KnowledgeConflict(ValueError):
+    pass
+
+
+class KnowledgeInvalid(ValueError):
+    pass
+
+
+def require_manager(role: str) -> None:
+    if role != "manager":
+        raise KnowledgeForbidden("A simulated Manager is required.")
+
+
+def require_revision(version: KnowledgeVersion, revision: int, status: str) -> None:
+    if version.status != status or version.draft_revision != revision:
+        raise KnowledgeConflict("The source version changed. Load its saved state.")
+
+
+def require_publishable(version: KnowledgeVersion, confirmed: bool) -> None:
+    if (
+        not confirmed
+        or version.review_issues
+        or not version.chunks
+        or not version.scopes
+    ):
+        raise KnowledgeInvalid(
+            "Confirm review and resolve all issues before publishing."
+        )
+
+
+def fingerprint(action: str, target: int, request: BaseModel) -> str:
+    return hashlib.sha256(
+        f"{action}/{target}/{request.model_dump_json()}".encode()
+    ).hexdigest()
+
+
+def require_space(
+    space: EmbeddingSpace, model: str, version: str, dimensions: int
+) -> None:
+    if (space.model, space.version, space.dimensions) != (model, version, dimensions):
+        raise KnowledgeConflict(
+            "The configured embedding space requires explicit reindex and activation."
+        )

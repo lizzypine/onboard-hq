@@ -25,13 +25,15 @@ from tests.database import ROOT, disposable_database, migrate_test_database
 from tests.fixtures.legacy_database import dbmate
 
 
-def stored_rows(url):
+def stored_rows(url, historical=None):
     result = {}
     with psycopg.connect(url) as conn:
         tables = conn.execute(
             "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> 'schema_migrations' ORDER BY tablename"
         ).fetchall()
         for (table,) in tables:
+            if historical is not None and table not in historical:
+                continue
             rows = [
                 row[0]
                 for row in conn.execute(
@@ -112,7 +114,7 @@ def test_additions_upgrade_preserves_version_four_evidence_and_seed(tmp_path):
             == 1
         )
         migrate_test_database(url)
-        assert stored_rows(url) == before
+        assert stored_rows(url, historical=before) == before
 
         async def reseed():
             async with create_pool(url) as pool:
@@ -123,11 +125,11 @@ def test_additions_upgrade_preserves_version_four_evidence_and_seed(tmp_path):
             next(r for r in provider.requirements if r.name == "Drug screening").status
             == "Pending"
         )
-        assert stored_rows(url) == before
+        assert stored_rows(url, historical=before) == before
         with psycopg.connect(url) as conn:
             assert conn.execute(
                 "SELECT count(*) FROM schema_migrations"
-            ).fetchone() == (5,)
+            ).fetchone() == (6,)
             assert conn.execute(
                 "SELECT count(*) FROM requirements WHERE checklist_template_id IS NULL OR initial_status IS NOT NULL OR initial_scheduled_date IS NOT NULL OR initial_deadline IS NOT NULL"
             ).fetchone() == (0,)

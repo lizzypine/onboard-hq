@@ -1,7 +1,3 @@
---
--- PostgreSQL database dump
---
-
 \restrict dbmate
 
 -- Dumped from database version 18.6 (Homebrew)
@@ -18,6 +14,93 @@ SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
 SET row_security = off;
+
+--
+-- Name: vector; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION vector; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION vector IS 'vector data type and ivfflat and hnsw access methods';
+
+
+--
+-- Name: configure_synthetic_knowledge_links(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.configure_synthetic_knowledge_links() RETURNS void
+    LANGUAGE sql
+    AS $$
+INSERT INTO requirement_knowledge_links(provider_type_id,requirement_definition_id,topic)
+                SELECT DISTINCT t.id,d.id,b.topic FROM provider_types t
+                JOIN checklist_templates c ON c.provider_type_id=t.id
+                JOIN template_requirements m ON m.checklist_template_id=c.id
+                JOIN requirement_definitions d ON m.requirement_definition_id=d.id
+                JOIN (VALUES ('Hawaii dental license','dental'),('State NED license','ned')) b(name,topic)
+                ON d.name=b.name WHERE t.name='Dentist' ON CONFLICT DO NOTHING;
+$$;
+
+
+--
+-- Name: knowledge_draft_children(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.knowledge_draft_children() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP <> 'INSERT' AND (SELECT status FROM knowledge_versions WHERE id=OLD.version_id FOR UPDATE) <> 'draft' THEN
+    RAISE EXCEPTION 'Published evidence is immutable'; END IF;
+ IF TG_OP <> 'DELETE' AND (SELECT status FROM knowledge_versions WHERE id=NEW.version_id FOR UPDATE) <> 'draft' THEN
+    RAISE EXCEPTION 'Published evidence is immutable'; END IF;
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+ RETURN NEW;
+END $$;
+
+
+--
+-- Name: knowledge_freeze_version(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.knowledge_freeze_version() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+ IF TG_OP='INSERT' THEN
+   IF NEW.status='draft' THEN RETURN NEW; END IF;
+   RAISE EXCEPTION 'A new source version must begin as a draft';
+ END IF;
+ IF OLD.status='draft' AND TG_OP='UPDATE' THEN
+   IF NEW.status='draft' THEN RETURN NEW; END IF;
+   IF NEW.status='published' AND EXISTS(SELECT FROM knowledge_scopes WHERE version_id=NEW.id)
+      AND NOT EXISTS(SELECT FROM knowledge_review_issues WHERE version_id=NEW.id)
+      AND EXISTS(SELECT FROM knowledge_chunks WHERE version_id=NEW.id)
+      AND NOT EXISTS(SELECT FROM knowledge_chunks c WHERE c.version_id=NEW.id AND
+         (substring(NEW.text FROM c.char_start+1 FOR c.char_end-c.char_start)<>c.text
+          OR NOT EXISTS(SELECT FROM knowledge_embeddings e JOIN knowledge_state s ON s.active_space_id=e.space_id
+             WHERE e.chunk_id=c.id))) THEN RETURN NEW; END IF;
+   RAISE EXCEPTION 'Publication requires reviewed scopes, correct locators and complete active-space vectors';
+ END IF;
+ IF TG_OP='UPDATE' AND OLD.status='published' AND NEW.status IN ('withdrawn','superseded')
+    AND (to_jsonb(OLD)-'status'-'checksum')=(to_jsonb(NEW)-'status'-'checksum') THEN RETURN NEW; END IF;
+ RAISE EXCEPTION 'Retained knowledge version is immutable';
+END $$;
+
+
+--
+-- Name: knowledge_reject_change(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.knowledge_reject_change() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN RAISE EXCEPTION 'Retained knowledge evidence is immutable'; END $$;
+
 
 --
 -- Name: preserve_catalog_label(); Type: FUNCTION; Schema: public; Owner: -
@@ -208,6 +291,296 @@ ALTER TABLE public.checklist_templates ALTER COLUMN id ADD GENERATED ALWAYS AS I
 
 
 --
+-- Name: embedding_spaces; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.embedding_spaces (
+    id integer NOT NULL,
+    model text NOT NULL,
+    version text NOT NULL,
+    dimensions integer NOT NULL,
+    CONSTRAINT embedding_spaces_dimensions_check CHECK (((dimensions >= 1) AND (dimensions <= 16000))),
+    CONSTRAINT embedding_spaces_model_check CHECK ((btrim(model) <> ''::text)),
+    CONSTRAINT embedding_spaces_version_check CHECK ((btrim(version) <> ''::text))
+);
+
+
+--
+-- Name: TABLE embedding_spaces; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.embedding_spaces IS 'Immutable identity for compatible embedding vectors.';
+
+
+--
+-- Name: embedding_spaces_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.embedding_spaces ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.embedding_spaces_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: knowledge_chunks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.knowledge_chunks (
+    id integer NOT NULL,
+    version_id integer NOT NULL,
+    section text NOT NULL,
+    page integer,
+    char_start integer NOT NULL,
+    char_end integer NOT NULL,
+    text text NOT NULL,
+    terms tsvector GENERATED ALWAYS AS (to_tsvector('english'::regconfig, text)) STORED,
+    CONSTRAINT knowledge_chunks_char_start_check CHECK ((char_start >= 0)),
+    CONSTRAINT knowledge_chunks_check CHECK (((char_end - char_start) = char_length(text))),
+    CONSTRAINT knowledge_chunks_page_check CHECK ((page > 0)),
+    CONSTRAINT knowledge_chunks_section_check CHECK ((btrim(section) <> ''::text)),
+    CONSTRAINT knowledge_chunks_text_check CHECK ((btrim(text) <> ''::text))
+);
+
+
+--
+-- Name: TABLE knowledge_chunks; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.knowledge_chunks IS 'Immutable published passages with offsets into the retained extraction.';
+
+
+--
+-- Name: knowledge_chunks_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.knowledge_chunks ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.knowledge_chunks_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: knowledge_documents; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.knowledge_documents (
+    id integer NOT NULL,
+    source_key text NOT NULL,
+    title text NOT NULL,
+    source_kind text NOT NULL,
+    publisher text NOT NULL,
+    original_url text,
+    CONSTRAINT knowledge_documents_check CHECK (((source_kind = 'official'::text) = (original_url IS NOT NULL))),
+    CONSTRAINT knowledge_documents_publisher_check CHECK ((btrim(publisher) <> ''::text)),
+    CONSTRAINT knowledge_documents_source_key_check CHECK ((btrim(source_key) <> ''::text)),
+    CONSTRAINT knowledge_documents_source_kind_check CHECK ((source_kind = ANY (ARRAY['official'::text, 'internal'::text]))),
+    CONSTRAINT knowledge_documents_title_check CHECK ((btrim(title) <> ''::text))
+);
+
+
+--
+-- Name: TABLE knowledge_documents; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.knowledge_documents IS 'Immutable configured source identity and provenance.';
+
+
+--
+-- Name: knowledge_documents_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.knowledge_documents ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.knowledge_documents_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: knowledge_embeddings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.knowledge_embeddings (
+    chunk_id integer NOT NULL,
+    space_id integer NOT NULL,
+    dimensions integer NOT NULL,
+    embedding public.vector NOT NULL,
+    CONSTRAINT knowledge_embeddings_check CHECK (((public.vector_dims(embedding) = dimensions) AND (public.vector_norm(embedding) > (0)::double precision)))
+);
+
+
+--
+-- Name: TABLE knowledge_embeddings; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.knowledge_embeddings IS 'A complete vector for a specific passage and compatible model space.';
+
+
+--
+-- Name: knowledge_publications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.knowledge_publications (
+    id integer NOT NULL,
+    operation_id uuid NOT NULL,
+    request_hash text NOT NULL,
+    action text NOT NULL,
+    version_id integer NOT NULL,
+    draft_revision integer NOT NULL,
+    corpus_revision bigint NOT NULL,
+    superseded_version_id integer,
+    decided_at timestamp with time zone DEFAULT now() NOT NULL,
+    role text DEFAULT 'manager'::text NOT NULL,
+    CONSTRAINT knowledge_publications_action_check CHECK ((action = ANY (ARRAY['create'::text, 'edit'::text, 'publish'::text, 'withdraw'::text]))),
+    CONSTRAINT knowledge_publications_corpus_revision_check CHECK ((corpus_revision >= 0)),
+    CONSTRAINT knowledge_publications_draft_revision_check CHECK ((draft_revision > 0)),
+    CONSTRAINT knowledge_publications_request_hash_check CHECK ((length(request_hash) = 64)),
+    CONSTRAINT knowledge_publications_role_check CHECK ((role = 'manager'::text))
+);
+
+
+--
+-- Name: TABLE knowledge_publications; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.knowledge_publications IS 'Immutable simulated Manager operation receipts including supersession history.';
+
+
+--
+-- Name: knowledge_publications_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.knowledge_publications ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.knowledge_publications_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
+-- Name: knowledge_review_issues; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.knowledge_review_issues (
+    version_id integer NOT NULL,
+    issue text NOT NULL,
+    CONSTRAINT knowledge_review_issues_issue_check CHECK ((btrim(issue) <> ''::text))
+);
+
+
+--
+-- Name: TABLE knowledge_review_issues; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.knowledge_review_issues IS 'Unresolved review issues that block publication.';
+
+
+--
+-- Name: knowledge_scopes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.knowledge_scopes (
+    version_id integer NOT NULL,
+    provider_type_id integer NOT NULL,
+    jurisdiction text NOT NULL,
+    topic text NOT NULL,
+    CONSTRAINT knowledge_scopes_jurisdiction_check CHECK ((btrim(jurisdiction) <> ''::text)),
+    CONSTRAINT knowledge_scopes_topic_check CHECK ((btrim(topic) <> ''::text))
+);
+
+
+--
+-- Name: TABLE knowledge_scopes; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.knowledge_scopes IS 'Reviewed version applicability by configured provider type, jurisdiction and topic.';
+
+
+--
+-- Name: knowledge_state; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.knowledge_state (
+    singleton boolean DEFAULT true NOT NULL,
+    revision bigint DEFAULT 0 NOT NULL,
+    active_space_id integer NOT NULL,
+    CONSTRAINT knowledge_state_revision_check CHECK ((revision >= 0)),
+    CONSTRAINT knowledge_state_singleton_check CHECK (singleton)
+);
+
+
+--
+-- Name: TABLE knowledge_state; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.knowledge_state IS 'Atomic published corpus revision and active vector space.';
+
+
+--
+-- Name: knowledge_versions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.knowledge_versions (
+    id integer NOT NULL,
+    document_id integer NOT NULL,
+    status text DEFAULT 'draft'::text NOT NULL,
+    draft_revision integer DEFAULT 1 NOT NULL,
+    stated_revision text,
+    original bytea NOT NULL,
+    checksum text GENERATED ALWAYS AS (encode(sha256(original), 'hex'::text)) STORED,
+    media_type text NOT NULL,
+    text text NOT NULL,
+    retrieved_at timestamp with time zone NOT NULL,
+    reviewed_at timestamp with time zone,
+    effective_from date,
+    effective_to date,
+    CONSTRAINT knowledge_versions_check CHECK ((effective_from <= effective_to)),
+    CONSTRAINT knowledge_versions_check1 CHECK (((status = 'draft'::text) = (reviewed_at IS NULL))),
+    CONSTRAINT knowledge_versions_draft_revision_check CHECK ((draft_revision > 0)),
+    CONSTRAINT knowledge_versions_media_type_check CHECK ((media_type = ANY (ARRAY['text/plain'::text, 'text/html'::text, 'application/pdf'::text]))),
+    CONSTRAINT knowledge_versions_original_check CHECK (((octet_length(original) >= 1) AND (octet_length(original) <= 16777216))),
+    CONSTRAINT knowledge_versions_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'superseded'::text, 'withdrawn'::text]))),
+    CONSTRAINT knowledge_versions_text_check CHECK ((btrim(text) <> ''::text))
+);
+
+
+--
+-- Name: TABLE knowledge_versions; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.knowledge_versions IS 'Draft or retained source bytes, effective dates and immutable published evidence.';
+
+
+--
+-- Name: knowledge_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.knowledge_versions ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.knowledge_versions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: provider_types; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -305,6 +678,25 @@ ALTER TABLE public.requirement_definitions ALTER COLUMN id ADD GENERATED ALWAYS 
     NO MAXVALUE
     CACHE 1
 );
+
+
+--
+-- Name: requirement_knowledge_links; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.requirement_knowledge_links (
+    provider_type_id integer NOT NULL,
+    requirement_definition_id integer NOT NULL,
+    topic text NOT NULL,
+    CONSTRAINT requirement_knowledge_links_topic_check CHECK ((btrim(topic) <> ''::text))
+);
+
+
+--
+-- Name: TABLE requirement_knowledge_links; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.requirement_knowledge_links IS 'Configured type and definition bindings for optional question context.';
 
 
 --
@@ -595,6 +987,118 @@ ALTER TABLE ONLY public.checklist_templates
 
 
 --
+-- Name: embedding_spaces embedding_spaces_id_dimensions_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.embedding_spaces
+    ADD CONSTRAINT embedding_spaces_id_dimensions_key UNIQUE (id, dimensions);
+
+
+--
+-- Name: embedding_spaces embedding_spaces_model_version_dimensions_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.embedding_spaces
+    ADD CONSTRAINT embedding_spaces_model_version_dimensions_key UNIQUE (model, version, dimensions);
+
+
+--
+-- Name: embedding_spaces embedding_spaces_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.embedding_spaces
+    ADD CONSTRAINT embedding_spaces_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: knowledge_chunks knowledge_chunks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_chunks
+    ADD CONSTRAINT knowledge_chunks_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: knowledge_chunks knowledge_chunks_version_id_char_start_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_chunks
+    ADD CONSTRAINT knowledge_chunks_version_id_char_start_key UNIQUE (version_id, char_start);
+
+
+--
+-- Name: knowledge_documents knowledge_documents_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_documents
+    ADD CONSTRAINT knowledge_documents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: knowledge_documents knowledge_documents_source_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_documents
+    ADD CONSTRAINT knowledge_documents_source_key_key UNIQUE (source_key);
+
+
+--
+-- Name: knowledge_embeddings knowledge_embeddings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_embeddings
+    ADD CONSTRAINT knowledge_embeddings_pkey PRIMARY KEY (chunk_id, space_id);
+
+
+--
+-- Name: knowledge_publications knowledge_publications_operation_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_publications
+    ADD CONSTRAINT knowledge_publications_operation_id_key UNIQUE (operation_id);
+
+
+--
+-- Name: knowledge_publications knowledge_publications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_publications
+    ADD CONSTRAINT knowledge_publications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: knowledge_review_issues knowledge_review_issues_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_review_issues
+    ADD CONSTRAINT knowledge_review_issues_pkey PRIMARY KEY (version_id, issue);
+
+
+--
+-- Name: knowledge_scopes knowledge_scopes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_scopes
+    ADD CONSTRAINT knowledge_scopes_pkey PRIMARY KEY (version_id, provider_type_id, jurisdiction, topic);
+
+
+--
+-- Name: knowledge_state knowledge_state_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_state
+    ADD CONSTRAINT knowledge_state_pkey PRIMARY KEY (singleton);
+
+
+--
+-- Name: knowledge_versions knowledge_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_versions
+    ADD CONSTRAINT knowledge_versions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: provider_types provider_types_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -632,6 +1136,14 @@ ALTER TABLE ONLY public.providers
 
 ALTER TABLE ONLY public.requirement_definitions
     ADD CONSTRAINT requirement_definitions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: requirement_knowledge_links requirement_knowledge_links_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.requirement_knowledge_links
+    ADD CONSTRAINT requirement_knowledge_links_pkey PRIMARY KEY (provider_type_id, requirement_definition_id, topic);
 
 
 --
@@ -753,6 +1265,69 @@ CREATE INDEX checklist_edits_requirement ON public.checklist_edits USING btree (
 
 
 --
+-- Name: knowledge_chunk_terms; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX knowledge_chunk_terms ON public.knowledge_chunks USING gin (terms);
+
+
+--
+-- Name: knowledge_embeddings_dimensions; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX knowledge_embeddings_dimensions ON public.knowledge_embeddings USING btree (dimensions);
+
+
+--
+-- Name: knowledge_embeddings_space; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX knowledge_embeddings_space ON public.knowledge_embeddings USING btree (space_id);
+
+
+--
+-- Name: knowledge_publications_superseded; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX knowledge_publications_superseded ON public.knowledge_publications USING btree (superseded_version_id);
+
+
+--
+-- Name: knowledge_publications_version; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX knowledge_publications_version ON public.knowledge_publications USING btree (version_id);
+
+
+--
+-- Name: knowledge_scope_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX knowledge_scope_type ON public.knowledge_scopes USING btree (provider_type_id);
+
+
+--
+-- Name: knowledge_state_active_space; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX knowledge_state_active_space ON public.knowledge_state USING btree (active_space_id);
+
+
+--
+-- Name: knowledge_versions_document; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX knowledge_versions_document ON public.knowledge_versions USING btree (document_id);
+
+
+--
+-- Name: one_published_version; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX one_published_version ON public.knowledge_versions USING btree (document_id) WHERE (status = 'published'::text);
+
+
+--
 -- Name: provider_types_normalized_name; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -771,6 +1346,13 @@ CREATE INDEX providers_template ON public.providers USING btree (checklist_templ
 --
 
 CREATE UNIQUE INDEX requirement_definitions_normalized_name ON public.requirement_definitions USING btree (lower(btrim(name)));
+
+
+--
+-- Name: requirement_knowledge_definition; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX requirement_knowledge_definition ON public.requirement_knowledge_links USING btree (requirement_definition_id);
 
 
 --
@@ -844,6 +1426,62 @@ CREATE INDEX updates_provider_created ON public.updates USING btree (provider_id
 
 
 --
+-- Name: knowledge_chunks draft_chunks; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER draft_chunks BEFORE INSERT OR DELETE OR UPDATE ON public.knowledge_chunks FOR EACH ROW EXECUTE FUNCTION public.knowledge_draft_children();
+
+
+--
+-- Name: knowledge_review_issues draft_issues; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER draft_issues BEFORE INSERT OR DELETE OR UPDATE ON public.knowledge_review_issues FOR EACH ROW EXECUTE FUNCTION public.knowledge_draft_children();
+
+
+--
+-- Name: knowledge_scopes draft_scopes; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER draft_scopes BEFORE INSERT OR DELETE OR UPDATE ON public.knowledge_scopes FOR EACH ROW EXECUTE FUNCTION public.knowledge_draft_children();
+
+
+--
+-- Name: knowledge_versions freeze_version; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER freeze_version BEFORE INSERT OR DELETE OR UPDATE ON public.knowledge_versions FOR EACH ROW EXECUTE FUNCTION public.knowledge_freeze_version();
+
+
+--
+-- Name: knowledge_documents immutable_documents; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER immutable_documents BEFORE DELETE OR UPDATE ON public.knowledge_documents FOR EACH ROW EXECUTE FUNCTION public.knowledge_reject_change();
+
+
+--
+-- Name: knowledge_embeddings immutable_embeddings; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER immutable_embeddings BEFORE DELETE OR UPDATE ON public.knowledge_embeddings FOR EACH ROW EXECUTE FUNCTION public.knowledge_reject_change();
+
+
+--
+-- Name: knowledge_publications immutable_operations; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER immutable_operations BEFORE DELETE OR UPDATE ON public.knowledge_publications FOR EACH ROW EXECUTE FUNCTION public.knowledge_reject_change();
+
+
+--
+-- Name: embedding_spaces immutable_spaces; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER immutable_spaces BEFORE DELETE OR UPDATE ON public.embedding_spaces FOR EACH ROW EXECUTE FUNCTION public.knowledge_reject_change();
+
+
+--
 -- Name: checklist_edits preserve_checklist_edit; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -909,11 +1547,107 @@ ALTER TABLE ONLY public.checklist_templates
 
 
 --
+-- Name: knowledge_chunks knowledge_chunks_version_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_chunks
+    ADD CONSTRAINT knowledge_chunks_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.knowledge_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: knowledge_embeddings knowledge_embeddings_chunk_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_embeddings
+    ADD CONSTRAINT knowledge_embeddings_chunk_id_fkey FOREIGN KEY (chunk_id) REFERENCES public.knowledge_chunks(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: knowledge_embeddings knowledge_embeddings_space_id_dimensions_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_embeddings
+    ADD CONSTRAINT knowledge_embeddings_space_id_dimensions_fkey FOREIGN KEY (space_id, dimensions) REFERENCES public.embedding_spaces(id, dimensions) ON DELETE RESTRICT;
+
+
+--
+-- Name: knowledge_publications knowledge_publications_superseded_version_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_publications
+    ADD CONSTRAINT knowledge_publications_superseded_version_id_fkey FOREIGN KEY (superseded_version_id) REFERENCES public.knowledge_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: knowledge_publications knowledge_publications_version_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_publications
+    ADD CONSTRAINT knowledge_publications_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.knowledge_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: knowledge_review_issues knowledge_review_issues_version_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_review_issues
+    ADD CONSTRAINT knowledge_review_issues_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.knowledge_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: knowledge_scopes knowledge_scopes_provider_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_scopes
+    ADD CONSTRAINT knowledge_scopes_provider_type_id_fkey FOREIGN KEY (provider_type_id) REFERENCES public.provider_types(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: knowledge_scopes knowledge_scopes_version_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_scopes
+    ADD CONSTRAINT knowledge_scopes_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.knowledge_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: knowledge_state knowledge_state_active_space_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_state
+    ADD CONSTRAINT knowledge_state_active_space_id_fkey FOREIGN KEY (active_space_id) REFERENCES public.embedding_spaces(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: knowledge_versions knowledge_versions_document_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_versions
+    ADD CONSTRAINT knowledge_versions_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.knowledge_documents(id) ON DELETE RESTRICT;
+
+
+--
 -- Name: providers providers_checklist_template_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.providers
     ADD CONSTRAINT providers_checklist_template_id_fkey FOREIGN KEY (checklist_template_id) REFERENCES public.checklist_templates(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: requirement_knowledge_links requirement_knowledge_links_provider_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.requirement_knowledge_links
+    ADD CONSTRAINT requirement_knowledge_links_provider_type_id_fkey FOREIGN KEY (provider_type_id) REFERENCES public.provider_types(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: requirement_knowledge_links requirement_knowledge_links_requirement_definition_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.requirement_knowledge_links
+    ADD CONSTRAINT requirement_knowledge_links_requirement_definition_id_fkey FOREIGN KEY (requirement_definition_id) REFERENCES public.requirement_definitions(id) ON DELETE RESTRICT;
 
 
 --
@@ -1036,4 +1770,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20261112000100'),
     ('20261114000100'),
     ('20261115000100'),
-    ('20261122000100');
+    ('20261122000100'),
+    ('20261122000200');

@@ -61,13 +61,13 @@ def test_populated_uuid_upgrade_preserves_history():
                 conn.execute(
                     "SELECT count(*) AS n FROM pg_constraint WHERE contype='f' AND connamespace='public'::regnamespace"
                 ).fetchone()["n"]
-                == 16
+                == 28
             )
             assert (
                 conn.execute(
                     "SELECT count(*) AS n FROM pg_tables WHERE schemaname='public' AND tablename <> 'schema_migrations'"
                 ).fetchone()["n"]
-                == 12
+                == 22
             )
 
 
@@ -122,6 +122,8 @@ def test_normalization_down_refuses_after_empty_additions_down_without_data_loss
         migrate_legacy(url)
         graph = seed_legacy_graph(url)
         assert dbmate(url, "up").returncode == 0
+        # First remove the empty source foundation, then roll back migration five.
+        assert dbmate(url, "rollback").returncode == 0
         assert dbmate(url, "rollback").returncode == 0
         with psycopg.connect(url) as conn:
             assert conn.execute(

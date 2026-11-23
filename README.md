@@ -79,7 +79,7 @@ command passes the connection URL to `pg_dump` as a process argument. The commit
 using the same migrations and PostgreSQL 18 tools. Regenerate it there after schema
 changes; keep Neon credentials in the environment only.
 
-The schema has twelve application tables, with integer resource IDs, whole-checklist
+The onboarding slice has twelve application tables, with integer resource IDs, whole-checklist
 versions, normalized captured context/warnings, and immutable manual edit history.
 The UUID-to-integer change requires a coordinated maintenance-window cutover for an
 existing database; stop/drain the old application and verify a final backup before
@@ -123,6 +123,18 @@ Browser contexts and server processes are isolated per test; a failed browser te
 keeps its trace in ignored `test-results/`. CI installs Chromium and its system
 dependencies and retains failure traces as an artifact. Focused pure rule tests can
 still run without a database, for example `uv run pytest tests/test_dates.py`.
+
+## Licensing knowledge sources
+
+The source foundation adds ten application tables. Disposable PostgreSQL 18 needs pgvector 0.8.7. Install the pinned release with `PG_CONFIG=/opt/homebrew/opt/postgresql@18/bin/pg_config bash scripts/install-pgvector.sh` on Apple Silicon. On other systems point `PG_CONFIG` to the PostgreSQL 18 executable. The installer verifies the source archive checksum before building. CI runs its service on the matching pgvector image.
+
+List configured source identifiers with `uv run python -m app.knowledge_sources list`. In an explicitly selected development database with the migration and Dentist catalog, `uv run --env-file .env python -m app.knowledge_sources ingest SOURCE_ID` retrieves one configured source and saves a reviewable draft. Use `internal-guide` for the sanitized internal checklist. The CLI rejects unlisted URLs and redirects. A failed fetch leaves the existing published version available. Missing review/effective dates remain unknown.
+
+A fresh database starts with an empty published corpus. Each official source must be reachable at its configured URL, return its expected PDF or HTML content type, and pass extraction before Manager review. During source verification, direct retrieval of the NED practitioner instructions and 2026 prescriber education form returned HTTP errors. Those entries can be retried when the official endpoints accept the request. The CLI accepts configured source identifiers only.
+
+The Manager source API in `/docs` accepts independent UUID operation IDs, the current draft revision and the simulated Manager header. Managers can correct internal text, review scopes and issues, confirm publication, or withdraw a published version. Official source content is replaced through a new controlled import. Retained originals are available as downloads. Source review is required before information is available to retrieval.
+
+The embedding adapter shares the configured gateway/token. Its default model is `text-embedding-3-small`, version `1`, with 1536 dimensions. After changing `EMBEDDING_MODEL`, `EMBEDDING_VERSION` or `EMBEDDING_DIMENSIONS`, explicitly run `uv run --env-file .env python -m app.knowledge_sources activate-space` against the intended development database. It embeds published passages outside transactions and activates the new space after all vectors are ready. A concurrent publication requires restarting the reindex.
 
 ## What this feature does
 

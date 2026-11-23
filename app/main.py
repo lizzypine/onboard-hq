@@ -21,6 +21,9 @@ from app.database import (
     create_pool,
     database_url,
 )
+from app.dependencies import get_pool
+from app.embeddings import EmbeddingUnavailable
+from app.knowledge_routes import router as knowledge_router
 from app.models import (
     DemoRole,
     ProviderSummary,
@@ -48,6 +51,7 @@ from app.rules.checklist import (
     ChecklistEditForbidden,
     ChecklistEditInvalid,
 )
+from app.rules.knowledge import KnowledgeConflict, KnowledgeForbidden, KnowledgeInvalid
 from app.rules.provider_state import (
     ProviderArchivedConflict,
     ProviderLifecycleForbidden,
@@ -59,6 +63,7 @@ from app.rules.providers import (
     ProviderTemplateConflict,
 )
 from app.rules.review import ReviewConflict, ReviewForbidden, ReviewValidationError
+from app.source_extraction import SourceError
 
 
 @asynccontextmanager
@@ -80,13 +85,6 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 
 router = APIRouter()
 ResourcePath = Annotated[int, ApiPath(gt=0)]
-
-
-def get_pool(request: Request) -> DatabasePool:
-    pool: DatabasePool | None = getattr(request.app.state, "pool", None)
-    if pool is None:
-        raise HTTPException(503, "Database is not configured.")
-    return pool
 
 
 def get_repository(
@@ -274,9 +272,19 @@ async def template_conflict(_request: Request, error: Exception) -> JSONResponse
     )
 
 
+async def embedding_error(_request: Request, error: Exception) -> JSONResponse:
+    return JSONResponse(status_code=503, content={"detail": str(error)})
+
+
 def create_app() -> FastAPI:
     application = FastAPI(title="Onboard HQ", lifespan=lifespan)
     application.include_router(router)
+    application.include_router(knowledge_router)
+    application.add_exception_handler(KnowledgeForbidden, review_forbidden)
+    application.add_exception_handler(KnowledgeConflict, review_conflict)
+    application.add_exception_handler(KnowledgeInvalid, review_invalid)
+    application.add_exception_handler(SourceError, review_invalid)
+    application.add_exception_handler(EmbeddingUnavailable, embedding_error)
     application.mount(
         "/static",
         StaticFiles(directory=Path(__file__).parent / "static"),

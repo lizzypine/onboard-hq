@@ -23,6 +23,20 @@ INITIAL_STATUSES = {
 
 
 async def seed_synthetic(pool: DatabasePool) -> StoredProvider:
+    provider = await _seed_provider(pool)
+    async with connection(pool) as conn:
+        # Preserve repeatable seeding on the earlier normalized onboarding schema.
+        installed = await (
+            await conn.execute(
+                "SELECT to_regclass('public.requirement_knowledge_links') AS table_name"
+            )
+        ).fetchone()
+        if installed and installed["table_name"]:
+            await conn.execute("SELECT configure_synthetic_knowledge_links()")
+    return provider
+
+
+async def _seed_provider(pool: DatabasePool) -> StoredProvider:
     async with connection(pool) as conn:
         existing = await (
             await conn.execute(
