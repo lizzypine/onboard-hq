@@ -92,6 +92,6 @@ def require_additions(
 
 def require_templates(names: Sequence[str]) -> None:
     if not names:
-        raise ProviderCreationConflict(
+        raise ProviderTemplateConflict(
             "The selected provider type has no configured requirements."
         )

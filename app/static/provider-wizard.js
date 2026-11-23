@@ -25,13 +25,19 @@ function button(parent, label, action, className = "provider-quiet") {
 export function createProviderWizard({dialog, onSubmit, onCancel}) {
   const form = dialog.querySelector("#provider-form");
   const content = dialog.querySelector("#provider-step-content");
+  const scroll = dialog.querySelector("#provider-scroll");
   const forward = dialog.querySelector("#save-provider");
   const back = dialog.querySelector("#provider-back");
   const notice = dialog.querySelector("#provider-modal-status");
   let types = [], draft, step = 0, counter = 0, extra = null, editing = null;
   let returning = false, busy = false, recovery = null;
   const selected = () => types.find(kind => kind.id === draft.typeId);
-  const choices = name => selected()?.configured_statuses[normalize(name)] || selected()?.additional_statuses || [];
+  function configuredChoices(name) {
+    const catalog = selected()?.configured_statuses;
+    const key = normalize(name);
+    return catalog && Object.hasOwn(catalog, key) ? catalog[key] : null;
+  }
+  const choices = name => configuredChoices(name) || selected()?.additional_statuses || [];
 
   function additionProblem(item, exclude = item.id) {
     if (!item.name.trim()) return "Give this requirement a name.";
@@ -92,7 +98,7 @@ export function createProviderWizard({dialog, onSubmit, onCancel}) {
   }
 
   function tone(item, additional) {
-    const values = selected()?.configured_statuses[normalize(item.name)] || (additional ? selected()?.additional_statuses : null);
+    const values = configuredChoices(item.name) || (additional ? selected()?.additional_statuses : null);
     const status = item.status.trim().toLowerCase();
     if (!values || !values.some(value => value.toLowerCase() === status)) return "unknown";
     if (status === values.at(-1).toLowerCase()) return "finished";
@@ -254,7 +260,7 @@ export function createProviderWizard({dialog, onSubmit, onCancel}) {
     content.replaceChildren();
     [renderName, renderType, renderStart, renderRequirements, renderReview][step]();
     back.hidden = step === 0 || Boolean(recovery);
-    sync(); content.scrollTop = 0;
+    sync(); scroll.scrollTop = 0;
   }
 
   function focusStep() { (content.querySelector("input,select") || content.querySelector(".provider-step-title"))?.focus(); }

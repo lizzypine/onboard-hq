@@ -9,7 +9,7 @@
 #provider-dialog::backdrop { background: #18372d66; backdrop-filter: blur(3px); }
 #provider-dialog[open] { display: flex; }
 #provider-form { display: flex; flex-direction: column; width: 100%;
-  max-height: calc(100dvh - 36px); margin: 0; min-width: 0; }
+  max-height: calc(100dvh - 36px); margin: 0; min-width: 0; min-height: 0; }
 #provider-dialog .provider-modal-header { padding: 24px 28px 20px; flex: none;
   border-bottom: 1px solid #dce5df; }
 #provider-dialog .provider-modal-top { display: flex; justify-content: space-between; gap: 16px; }
@@ -31,7 +31,8 @@
 #provider-dialog .current .provider-step-dot { color: white; background: #23764f;
   border-color: #23764f; box-shadow: 0 0 0 4px #edf6ef; }
 #provider-dialog .done .provider-step-dot { color: #23764f; background: #e6f2e9; }
-#provider-step-content { padding: 26px 28px 28px; overflow-y: auto; min-height: 260px; }
+#provider-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-wrap: anywhere; }
+#provider-step-content { padding: 26px 28px 28px; }
 #provider-dialog .provider-eyebrow { font-size: 11px; font-weight: 700; color: #23764f;
   letter-spacing: 1px; margin: 0 0 8px; text-transform: uppercase; }
 #provider-dialog .provider-step-title { font-size: 25px; letter-spacing: -.6px; margin: 0 0 7px; }
@@ -89,7 +90,7 @@
   #provider-dialog { width: calc(100vw - 20px); max-height: calc(100dvh - 24px); }
   #provider-form { max-height: calc(100dvh - 24px); }
   #provider-dialog .provider-modal-header { padding: 20px 18px 16px; }
-  #provider-step-content { padding: 22px 18px; min-height: 220px; }
+  #provider-step-content { padding: 22px 18px; }
   #provider-dialog .provider-modal-footer { padding: 14px 12px; gap: 6px; }
   #provider-dialog .provider-modal-footer button { font-size: 13px; white-space: nowrap; }
   #provider-dialog .provider-step-title { font-size: 22px; }

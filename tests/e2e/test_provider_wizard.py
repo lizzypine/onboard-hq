@@ -1,9 +1,10 @@
 """The real Add Provider modal stages additions and saves one reviewed checklist."""
 
+import psycopg
 import pytest
 from playwright.sync_api import expect
 
-from tests.database import ROOT
+from tests.database import ROOT, configured_test_url
 from tests.e2e.test_checklist_edits import open_history, row, save_editor
 from tests.fixtures.current_database import configure_catalog
 
@@ -85,7 +86,7 @@ def test_one_requirement_is_saved_to_combined_draft_before_another(
     expect(table.locator("tbody tr")).to_have_count(7)
     images = ROOT / ".superpowers/sdd/2026-11-22-add-provider-walkthrough"
     page.set_viewport_size({"width": 1200, "height": 1000})
-    dialog.locator("#provider-step-content").evaluate("node => { node.scrollTop = 0; }")
+    dialog.locator("#provider-scroll").evaluate("node => { node.scrollTop = 0; }")
     dialog.screenshot(path=images / "modal-requirements-desktop.png")
     page.set_viewport_size({"width": 390, "height": 844})
     dialog.screenshot(path=images / "modal-requirements-mobile.png")
@@ -384,3 +385,81 @@ def test_saved_addition_manual_edit_analysis_and_approval_survive_restart(
     expect(page.get_by_role("article", name="Orientation", exact=True)).to_contain_text(
         "Approved"
     )
+
+
+@pytest.mark.parametrize("name", ["Constructor", "__proto__", "constructor"])
+def test_reserved_object_names_use_normal_additional_status_choices(
+    page, app_server, name
+):
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    dialog = requirements_step(page, app_server)
+    dialog.get_by_role("button", name="Add requirement", exact=True).click()
+    group = dialog.get_by_role("group", name="New additional requirement", exact=True)
+    group.get_by_label("Requirement name", exact=True).fill(name)
+    expect(group.get_by_label("Status", exact=True).get_by_role("option")).to_have_text(
+        ["Outstanding", "Pending", "Scheduled", "Incomplete", "Completed"]
+    )
+    group.get_by_label("Status", exact=True).select_option("Completed")
+    group.get_by_role("button", name="Save requirement", exact=True).click()
+    saved = save_provider(page, app_server, dialog)
+    assert any(item["name"] == name for item in saved["requirements"])
+    assert errors == []
+
+
+@pytest.mark.parametrize("view", ["name", "requirements", "long_status"])
+def test_landscape_footer_stays_inside_dialog_and_accepts_pointer_input(
+    page, app_server, view
+):
+    if view == "name":
+        dialog = open_wizard(page, app_server)
+        dialog.get_by_label("Provider name", exact=True).fill("Dr. Landscape Example")
+    else:
+        dialog = requirements_step(page, app_server)
+        if view == "long_status":
+            edit_addition(
+                dialog, "Orientation " + "x" * 700, "Pending", ""
+            ).get_by_role("button", name="Save requirement", exact=True).click()
+    page.set_viewport_size({"width": 844, "height": 390})
+    bounds = dialog.bounding_box()
+    footer = dialog.locator("#save-provider").bounding_box()
+    assert footer["y"] >= bounds["y"] and footer["y"] + footer["height"] <= min(
+        390, bounds["y"] + bounds["height"]
+    )
+    dialog.locator("#save-provider").click()
+    if view == "name":
+        expect(dialog.get_by_label("Provider type", exact=True)).to_be_visible()
+    else:
+        expect(
+            dialog.get_by_role("heading", name="Review before adding", exact=True)
+        ).to_be_visible()
+
+
+def test_empty_template_after_review_returns_an_editable_draft(page, app_server):
+    other = configure_catalog("Synthetic Other", ["Other standard"])
+    dialog = requirements_step(page, app_server, other.id)
+    edit_addition(dialog).get_by_role(
+        "button", name="Save requirement", exact=True
+    ).click()
+    dialog.locator("#save-provider").click()
+    with psycopg.connect(configured_test_url()) as conn:
+        conn.execute(
+            "DELETE FROM template_requirements WHERE checklist_template_id=%s",
+            (other.checklist_template_id,),
+        )
+    dialog.locator("#save-provider").click()
+    expect(dialog.get_by_label("Provider type", exact=True)).to_be_visible()
+    assert (
+        page.evaluate("sessionStorage.getItem('onboard-hq:provider-creation:v1')")
+        is None
+    )
+    dialog.get_by_label("Provider type", exact=True).select_option(index=1)
+    dialog.locator("#save-provider").click()
+    expect(dialog).to_contain_text("Dr. Wizard Example")
+    expect(dialog).to_contain_text("Orientation")
+    with page.expect_response(
+        lambda r: r.request.method == "POST" and r.url == app_server.url + "/providers"
+    ) as response:
+        dialog.locator("#save-provider").click()
+    assert response.value.status == 201
+    assert len(response.value.json()["requirements"]) == 6

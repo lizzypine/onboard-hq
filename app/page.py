@@ -140,9 +140,11 @@ PAGE = """<!doctype html>
           </div><button type="button" id="close-provider" class="provider-close" aria-label="Close Add provider">×</button></div>
           <ol id="provider-progress" class="provider-steps" aria-label="Setup progress"></ol>
         </header>
-        <p id="provider-modal-status" role="status" aria-live="polite"></p>
-        <button type="button" id="retry-provider-catalog" hidden>Retry loading requirements</button>
-        <div id="provider-step-content"></div>
+        <div id="provider-scroll" tabindex="0" role="region" aria-label="Scrollable provider setup">
+          <p id="provider-modal-status" role="status" aria-live="polite"></p>
+          <button type="button" id="retry-provider-catalog" hidden>Retry loading requirements</button>
+          <div id="provider-step-content"></div>
+        </div>
         <footer class="provider-modal-footer">
           <button type="button" id="provider-back" class="provider-quiet">← Back</button>
           <div class="provider-footer-actions"><button type="button" id="cancel-provider" class="provider-quiet">Cancel</button>
