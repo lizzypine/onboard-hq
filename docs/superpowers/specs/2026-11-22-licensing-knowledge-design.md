@@ -56,8 +56,14 @@ These choices minimize changes to the established extraction and review workflow
 Keep the current parent requirements and their saved status/date/deadline rows.
 Add a keyboard-operable **License guide and substeps** disclosure beneath a
 supported requirement, separate from its pending parent-status suggestions.
+Start it collapsed on page load and provider change. Its summary keeps the saved
+completion total and pending-proposal count visible without opening the substeps.
 Within it, show the approved instructions, source links, assigned substeps with
 saved badges, and any pending substep proposals. Use text labels as well as color.
+Each substep is also individually collapsible and starts closed: its summary
+contains the name and saved status, while its expanded content contains details
+and Propose change. Preserve disclosure choices through same-provider refreshes
+and review saves; do not automatically expand all steps when a proposal arrives.
 Guide prose wraps at phone width; only comparison tables scroll horizontally.
 
 Each substep has one saved status: **Outstanding**, **Pending**, **Incomplete**, or
@@ -121,10 +127,21 @@ An informational answer's audit record is not a progress mutation.
 
 ## Ask AI experience
 
-Add a distinct **Ask AI** section with a decorative three-sparkle icon, an accessible
-text heading, a question field, and suggested questions. Add an **Ask about this
-requirement** action in license guides that opens the same section with context.
+Place a compact **Ask AI** button with a decorative three-sparkle icon beside the
+checklist heading. It opens a native modal dialog containing an accessible text
+heading, question field, suggested questions, answers, and expandable citations.
+Keep the dialog closed initially; no permanent AI panel occupies the checklist.
+An **Ask about this requirement** action in license guides opens the same modal
+with context. Closing the dialog preserves the checklist's disclosure state.
 Both simulated roles may ask, including while viewing an archived provider.
+
+Use native modal focus containment and an explicit Close Ask AI button. Escape
+closes the modal and focus returns to the invoking button. Autofocus the question
+field on open. On phones, size the modal to the viewport and scroll its contents
+without overflowing the page. Provider changes close the modal and clear its
+unsaved context; saved answers retain their captured provider context. Closing
+while a question runs must not resubmit or replay it: reopening for the same
+provider reconciles the same request/result through the saved request identity.
 
 Display the selected provider type and topic context. Use Hawaii Dentist scope
 and allow questions to cross related dental/NED/DEA topics. Renewal/CE questions
@@ -375,7 +392,9 @@ filtering, immutable versions, ownership, rollback, and concurrent decisions or
 publication. Browser tests cover both roles, saved substeps across refresh/restart,
 independent approvals/reversals, failed/lost responses, Manager source publishing,
 answer citations/refusals/conflicts, source changes during generation, provider
-switching, keyboard use, and contained phone layout.
+switching, default-closed and independently toggled substeps, preserved disclosure
+choices, modal opening/closing and focus restoration, Escape, in-flight modal
+closure without replay, keyboard use, and contained phone layout.
 
 All model layers use TestModel with real model requests disabled. Embedding and
 source-fetch adapters are independently blocked or replaced with deterministic
