@@ -19,14 +19,12 @@ def test_html_sections_and_exact_spans():
     assert "ignored" not in parsed.text
 
 
-def test_pdf_page_locator_and_empty_password():
+def make_pdf(*pages, encrypt=False):
     from pypdf import PdfWriter
     from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
-    from app.knowledge_sources import extract_source
-
     writer = PdfWriter()
-    for value in ("First page", "Second page"):
+    for lines in pages:
         page = writer.add_blank_page(width=612, height=792)
         font = DictionaryObject(
             {
@@ -39,12 +37,28 @@ def test_pdf_page_locator_and_empty_password():
             {NameObject("/Font"): DictionaryObject({NameObject("/F1"): font})}
         )
         stream = DecodedStreamObject()
-        stream.set_data(f"BT /F1 12 Tf ({value}) Tj ET".encode())
+        stream.set_data(
+            (
+                "BT /F1 12 Tf 14 TL "
+                + " T* ".join(f"({line}) Tj" for line in lines)
+                + " ET"
+            ).encode("latin-1")
+        )
         page[NameObject("/Contents")] = stream
-    writer.encrypt("", algorithm="AES-256")
+    if encrypt:
+        writer.encrypt("", algorithm="AES-256")
     out = BytesIO()
     writer.write(out)
-    parsed = extract_source(out.getvalue(), "application/pdf")
+    return out.getvalue()
+
+
+def test_pdf_page_locator_and_empty_password():
+    from app.knowledge_sources import extract_source
+
+    parsed = extract_source(
+        make_pdf(["First page"], ["Second page"], encrypt=True), "application/pdf"
+    )
+    assert {c.section for c in parsed.chunks} == {"Document"}
     assert [(c.page, c.text) for c in parsed.chunks] == [
         (1, "First page"),
         (2, "Second page"),
@@ -153,3 +167,44 @@ def test_legacy_statute_html_charset_keeps_section_symbol():
     raw = b'<meta http-equiv="Content-Type" content="text/html; charset=windows-1252"><p>\xa7 448-9. Application.</p>'
     parsed = extract_source(raw, "text/html")
     assert parsed.chunks[0].text == "§ 448-9. Application."
+
+
+def test_pdf_section_continues_across_page_break_until_next_rule():
+    from app.knowledge_sources import extract_source
+
+    raw = make_pdf(
+        ["Section I - Renewal", "Renewal requires 32 hours."],
+        [
+            "Except for initial-year applicants.",
+            "Section II - Fees",
+            "Pay the renewal fee.",
+        ],
+    )
+    result = extract_source(raw, "application/pdf")
+    assert [(c.section, c.page, c.text) for c in result.chunks] == [
+        ("Section I - Renewal", 1, "Section I - Renewal\nRenewal requires 32 hours."),
+        ("Section I - Renewal", 2, "Except for initial-year applicants."),
+        ("Section II - Fees", 2, "Section II - Fees\nPay the renewal fee."),
+    ]
+    assert all(result.text[c.char_start : c.char_end] == c.text for c in result.chunks)
+
+
+def test_pdf_running_rule_number_does_not_reset_continuation():
+    from app.knowledge_sources import extract_source
+
+    raw = make_pdf(
+        ["§16-79-144 Requirements for renewal.", "Complete the reviewed hours."],
+        [
+            "§16-79-146",
+            "Except during the initial period.",
+            "§16-79-145 Course approval.",
+        ],
+    )
+    result = extract_source(raw, "application/pdf")
+    assert [(c.section, c.page) for c in result.chunks] == [
+        ("§16-79-144", 1),
+        ("§16-79-144", 2),
+        ("§16-79-145", 2),
+    ]
+    assert result.chunks[1].text == "§16-79-146\nExcept during the initial period."
+    assert all(result.text[c.char_start : c.char_end] == c.text for c in result.chunks)

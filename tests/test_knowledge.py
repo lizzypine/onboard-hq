@@ -338,3 +338,71 @@ def test_requirement_context_is_bound_to_saved_type_and_definition(
         ids["Hawaii dental license"]: ["dental"],
         ids["State NED license"]: ["ned"],
     }
+
+
+@pytest.mark.parametrize("operation", ["publish", "withdraw", "reindex"])
+def test_source_operation_waits_for_embedding_space_activation(
+    client, db_url, operation
+):
+    from app.database import create_pool
+    from app.knowledge import reindex
+    from app.repository.knowledge import KnowledgeRepository
+    from tests.knowledge_fixtures import SyntheticEmbeddings
+    from tests.test_catalog_races import wait_until_row_lock_blocks
+
+    doc = internal_id(client)
+    published_version = create(client, doc)
+    assert publish(client, published_version).status_code == 200
+    draft = create(client, doc)
+    new_client = SyntheticEmbeddings()
+    new_client.model = str(uuid4())
+
+    async def scenario():
+        async with create_pool(db_url) as pool:
+            repo = KnowledgeRepository(pool)
+            previous = await repo.current_space()
+            revision, next_space, _ = await repo.prepare_space(
+                new_client.model, new_client.version, new_client.dimensions
+            )
+            async with pool.connection() as activator:
+                await activator.execute(
+                    """INSERT INTO knowledge_embeddings(chunk_id,space_id,dimensions,embedding)
+                    SELECT chunk_id,%s,dimensions,embedding FROM knowledge_embeddings
+                    WHERE space_id=%s""",
+                    (next_space.id, previous.id),
+                )
+                await activator.execute(
+                    "UPDATE knowledge_state SET active_space_id=%s,revision=revision+1 WHERE singleton",
+                    (next_space.id,),
+                )
+                if operation == "publish":
+                    task = asyncio.create_task(
+                        asyncio.to_thread(publish, client, draft)
+                    )
+                elif operation == "withdraw":
+                    task = asyncio.create_task(
+                        asyncio.to_thread(
+                            client.post,
+                            f"/knowledge/versions/{published_version}/withdraw",
+                            json={"operation_id": str(uuid4()), "expected_revision": 1},
+                            headers=MANAGER,
+                        )
+                    )
+                else:
+                    task = asyncio.create_task(reindex(repo, new_client))
+                try:
+                    await wait_until_row_lock_blocks(activator)
+                finally:
+                    await activator.commit()
+                result = await asyncio.wait_for(task, timeout=5)
+            assert await repo.current_space() == next_space
+            if operation == "publish":
+                assert result.status_code == 409
+                assert (await repo.get_version(draft)).status == "draft"
+            elif operation == "withdraw":
+                assert result.status_code == 200
+                assert result.json()["corpus_revision"] == revision + 2
+            else:
+                assert result is None
+
+    asyncio.run(scenario())

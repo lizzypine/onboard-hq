@@ -101,19 +101,42 @@ def _plain(text: str) -> Extraction:
     return Extraction(text=text, chunks=chunks)
 
 
-def _pdf(raw: bytes) -> list[tuple[str, int | None, str]]:
+# Legal headings include a rule number followed by a title. A bare rule
+# number is often a running page header and does not start a new section.
+PDF_HEADING = re.compile(
+    r"^[ \t]*(?:(?P<rule>§[ \t]*\d+[A-Z]?(?:-\d+)+(?:\.\d+)?)(?=[ \t]+[A-Z])"
+    r"|(?P<title>(?i:section|chapter|subchapter)[ \t]+(?:[IVXLCDM]+|\d+)"
+    r"[ \t]*[-–—:][ \t]*[^\n]{1,160})$)",
+    re.MULTILINE,
+)
+
+
+def _pdf(raw: bytes) -> Extraction:
     try:
         reader = PdfReader(BytesIO(raw))
         if reader.is_encrypted and not reader.decrypt(""):
             raise SourceError("The configured PDF requires a password.")
         if len(reader.pages) > 500:
             raise SourceError("Source exceeds the page limit.")
-        return [
-            (f"Page {i}", i, (p.extract_text() or "").strip())
-            for i, p in enumerate(reader.pages, 1)
-        ]
+        pages = [(page.extract_text() or "").strip() for page in reader.pages]
     except (PyPdfError, OSError, ValueError) as exc:
         raise SourceError("Could not extract the configured PDF.") from exc
+
+    text = "\n\n".join(pages)
+    chunks = []
+    section = "Document"
+    page_start = 0
+    for page_number, page_text in enumerate(pages, 1):
+        start = page_start
+        for match in PDF_HEADING.finditer(page_text):
+            boundary = page_start + match.start()
+            chunks.extend(_chunks(text, section, page_number, start, boundary))
+            section = (match.group("rule") or match.group("title")).strip()
+            start = boundary
+        end = page_start + len(page_text)
+        chunks.extend(_chunks(text, section, page_number, start, end))
+        page_start = end + 2
+    return Extraction(text=text, chunks=chunks)
 
 
 def _html_text(raw: bytes) -> str:
@@ -141,21 +164,19 @@ def extract_source(raw: bytes, media_type: Media) -> Extraction:
         raise SourceError("Source size is outside the supported range.")
     if media_type == "text/plain":
         result = _plain(raw.decode("utf-8-sig"))
+    elif media_type == "application/pdf":
+        result = _pdf(raw)
     else:
-        parts: list[tuple[str, int | None, str]]
-        if media_type == "application/pdf":
-            parts = _pdf(raw)
-        else:
-            parser = Headings()
-            parser.feed(_html_text(raw))
-            parser.close()
-            parser.flush()
-            parts = [(section, None, body) for section, body in parser.parts]
-        text = "\n\n".join(part[2] for part in parts)
+        parser = Headings()
+        parser.feed(_html_text(raw))
+        parser.close()
+        parser.flush()
+        parts = parser.parts
+        text = "\n\n".join(body for _, body in parts)
         chunks = []
         pos = 0
-        for section, page, body in parts:
-            chunks.extend(_chunks(text, section, page, pos, pos + len(body)))
+        for section, body in parts:
+            chunks.extend(_chunks(text, section, None, pos, pos + len(body)))
             pos += len(body) + 2
         result = Extraction(text=text, chunks=chunks)
     if not result.chunks or len(result.text) > MAX_TEXT:

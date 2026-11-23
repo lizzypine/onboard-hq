@@ -34,13 +34,19 @@ async def row(conn: Conn, query: str, args: tuple = ()) -> dict[str, Any]:
 
 
 async def state(conn: Conn, lock: bool = False) -> tuple[int, EmbeddingSpace]:
-    found = await row(
+    # Lock the stable singleton before following the mutable active-space key.
+    # A waiting join can otherwise lose its candidate when the activator commits.
+    current = await row(
         conn,
-        "SELECT s.revision,e.* FROM knowledge_state s JOIN embedding_spaces e ON e.id=s.active_space_id WHERE singleton"
-        + (" FOR UPDATE OF s" if lock else ""),
+        "SELECT revision,active_space_id FROM knowledge_state WHERE singleton"
+        + (" FOR UPDATE" if lock else ""),
     )
-    revision = found.pop("revision")
-    return revision, EmbeddingSpace(**found)
+    space = await row(
+        conn,
+        "SELECT * FROM embedding_spaces WHERE id=%s",
+        (current["active_space_id"],),
+    )
+    return current["revision"], EmbeddingSpace(**space)
 
 
 async def version_read(conn: Conn, vid: int) -> KnowledgeVersion:
