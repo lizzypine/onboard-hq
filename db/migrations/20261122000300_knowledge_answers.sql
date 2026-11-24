@@ -43,6 +43,13 @@ CREATE INDEX qa_runs_provider_type ON qa_runs(provider_type_id);
 CREATE INDEX qa_runs_requirement ON qa_runs(requirement_id,provider_id);
 CREATE INDEX qa_runs_space ON qa_runs(embedding_space_id);
 
+CREATE TABLE qa_run_topics (
+    run_id integer NOT NULL REFERENCES qa_runs ON DELETE CASCADE,
+    topic text NOT NULL CHECK (btrim(topic) <> '' AND topic = lower(btrim(topic))),
+    PRIMARY KEY (run_id,topic)
+);
+COMMENT ON TABLE qa_run_topics IS 'One applicable topic resolved at capture and retained for later eligibility checks.';
+
 CREATE TABLE qa_corpus_versions (
     run_id integer NOT NULL REFERENCES qa_runs ON DELETE CASCADE,
     version_id integer NOT NULL REFERENCES knowledge_versions ON DELETE RESTRICT,
@@ -142,6 +149,7 @@ BEGIN
     END IF;
     RETURN NEW;
 END $$;
+CREATE TRIGGER qa_topic_guard BEFORE INSERT OR UPDATE OR DELETE ON qa_run_topics FOR EACH ROW EXECUTE FUNCTION qa_evidence_guard();
 CREATE TRIGGER qa_corpus_guard BEFORE INSERT OR UPDATE OR DELETE ON qa_corpus_versions FOR EACH ROW EXECUTE FUNCTION qa_evidence_guard();
 CREATE TRIGGER qa_retrieval_guard BEFORE INSERT OR UPDATE OR DELETE ON qa_retrieved_chunks FOR EACH ROW EXECUTE FUNCTION qa_evidence_guard();
 CREATE TRIGGER qa_claim_guard BEFORE INSERT OR UPDATE OR DELETE ON qa_claims FOR EACH ROW EXECUTE FUNCTION qa_evidence_guard();
@@ -161,6 +169,6 @@ CREATE TRIGGER qa_check_quote BEFORE INSERT ON qa_citations FOR EACH ROW EXECUTE
 DO $$ BEGIN
  IF EXISTS (SELECT FROM qa_runs) THEN RAISE EXCEPTION 'Retained answer history requires a backup before rollback'; END IF;
 END $$;
-DROP TABLE qa_citations, qa_claims, qa_retrieved_chunks, qa_corpus_versions, qa_runs;
+DROP TABLE qa_citations, qa_claims, qa_retrieved_chunks, qa_corpus_versions, qa_run_topics, qa_runs;
 ALTER TABLE knowledge_chunks DROP CONSTRAINT knowledge_chunks_id_version_id_key;
 DROP FUNCTION qa_run_guard(), qa_evidence_guard(), qa_check_quote();

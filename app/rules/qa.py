@@ -5,6 +5,64 @@ from collections.abc import Iterable
 
 from app.qa_models import AnswerDraft, RankedPassage
 
+DENTAL_TOPICS = frozenset({"dental", "renewal"})
+CONTROLLED_SUBSTANCE_TOPICS = frozenset({"ned", "dea", "pdmp"})
+SHARED_TOPICS = frozenset({"licensing", "internal", "statutory"})
+
+DENTAL_TERMS = frozenset(
+    {
+        "adex",
+        "biennial",
+        "biennium",
+        "ce",
+        "dental",
+        "dentist",
+        "dentists",
+        "ethics",
+        "har",
+        "periodontal",
+    }
+)
+CONTROLLED_SUBSTANCE_TERMS = frozenset(
+    {
+        "csr",
+        "dea",
+        "ned",
+        "pdmp",
+        "prescriber",
+        "prescribers",
+        "prescribing",
+    }
+)
+
+
+def question_topics(question: str, hint: str | None) -> list[str]:
+    """Use explicit intent first and keep related exceptions within each topic group."""
+    normalized = " ".join(re.findall(r"\w+", question.casefold()))
+    words = set(normalized.split())
+    topics = set(SHARED_TOPICS)
+    dental = bool(words & DENTAL_TERMS) or bool(
+        re.search(r"\bcontinuing ed(?:ucation)?\b", normalized)
+    )
+    controlled = bool(words & CONTROLLED_SUBSTANCE_TERMS) or any(
+        phrase in normalized
+        for phrase in (
+            "controlled substance",
+            "drug enforcement administration",
+            "narcotics enforcement division",
+            "prescription drug monitoring program",
+        )
+    )
+    if not dental and not controlled:
+        normalized_hint = hint.casefold() if hint else None
+        dental = normalized_hint not in CONTROLLED_SUBSTANCE_TOPICS
+        controlled = normalized_hint not in DENTAL_TOPICS
+    if dental:
+        topics.update(DENTAL_TOPICS)
+    if controlled:
+        topics.update(CONTROLLED_SUBSTANCE_TOPICS)
+    return sorted(topics)
+
 
 class QuestionConflict(ValueError):
     """A request UUID was already used for different input."""

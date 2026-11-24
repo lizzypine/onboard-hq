@@ -810,6 +810,24 @@ COMMENT ON TABLE public.qa_retrieved_chunks IS 'One fused candidate or adjacent 
 
 
 --
+-- Name: qa_run_topics; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qa_run_topics (
+    run_id integer NOT NULL,
+    topic text NOT NULL,
+    CONSTRAINT qa_run_topics_topic_check CHECK (((btrim(topic) <> ''::text) AND (topic = lower(btrim(topic)))))
+);
+
+
+--
+-- Name: TABLE qa_run_topics; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.qa_run_topics IS 'One applicable topic resolved at capture and retained for later eligibility checks.';
+
+
+--
 -- Name: qa_runs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1452,6 +1470,14 @@ ALTER TABLE ONLY public.qa_retrieved_chunks
 
 
 --
+-- Name: qa_run_topics qa_run_topics_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_run_topics
+    ADD CONSTRAINT qa_run_topics_pkey PRIMARY KEY (run_id, topic);
+
+
+--
 -- Name: qa_runs qa_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1980,6 +2006,13 @@ CREATE TRIGGER qa_run_guard BEFORE INSERT OR DELETE OR UPDATE ON public.qa_runs 
 
 
 --
+-- Name: qa_run_topics qa_topic_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER qa_topic_guard BEFORE INSERT OR DELETE OR UPDATE ON public.qa_run_topics FOR EACH ROW EXECUTE FUNCTION public.qa_evidence_guard();
+
+
+--
 -- Name: checklist_edits checklist_edits_requirement_id_provider_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2137,6 +2170,14 @@ ALTER TABLE ONLY public.qa_retrieved_chunks
 
 ALTER TABLE ONLY public.qa_retrieved_chunks
     ADD CONSTRAINT qa_retrieved_chunks_run_id_version_id_fkey FOREIGN KEY (run_id, version_id) REFERENCES public.qa_corpus_versions(run_id, version_id) ON DELETE CASCADE;
+
+
+--
+-- Name: qa_run_topics qa_run_topics_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_run_topics
+    ADD CONSTRAINT qa_run_topics_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.qa_runs(id) ON DELETE CASCADE;
 
 
 --

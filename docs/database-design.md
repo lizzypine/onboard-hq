@@ -6,14 +6,14 @@ This document records the reviewed PostgreSQL data model for the synthetic
 provider-onboarding prototype. It is a design reference, not an implementation
 plan or executable SQL. Keep `docs/proposal.md` unchanged.
 
-The implemented relational model contains **twenty-seven application tables**, described
+The implemented relational model contains **twenty-eight application tables**, described
 by [the generated schema](../db/schema.sql) and
 [the migration definitions](../db/migrations/). The first three migrations describe
 the former eight-table UUID/JSON schema; the fourth performs the coordinated
 integer-ID conversion, complete-checklist versioning, and normalized snapshots and
 warnings. The fifth adds provider-only checklist rows and immutable initial
 values for creation recovery, retaining twelve onboarding tables. The sixth adds ten
-licensing knowledge tables for the source foundation. The seventh adds five
+licensing knowledge tables for the source foundation. The seventh adds six
 tables for retained questions and citations. Migrations are not applied
 automatically; follow [the cutover runbook](database-cutover.md) for an existing
 database and obtain explicit authorization before changing Neon.
@@ -611,6 +611,7 @@ The source byte limit is 16 MiB. Original bytes and their generated SHA-256 chec
 | Implemented relation | One row stores |
 | --- | --- |
 | `qa_runs` | A retryable question, captured selected-provider/type/requirement context, model/retrieval configuration, processing/outcome state, and validated terminal answer/failure metadata. |
+| `qa_run_topics` | One resolved question topic retained for later eligibility checks. |
 | `qa_corpus_versions` | One source version eligible in the corpus snapshot captured for a question. |
 | `qa_retrieved_chunks` | One ranked candidate or adjacent context passage, with keyword/vector/fused ranks and the order of passages supplied to the answer agent. |
 | `qa_claims` | One ordered final answer claim belonging to a QA run. |
@@ -647,8 +648,14 @@ reuse returns 409. An archived provider can still ask. A worker interrupted befo
 a terminal write can leave a retained processing receipt for reconciliation. Identical
 POST retries also read that receipt.
 
-Both search paths use the captured published version IDs and the vector path uses
-the captured active space. Each path keeps at most 20 ranks. Reciprocal rank fusion
+Both search paths use the same captured published version IDs. Each version needs
+one reviewed scope row matching provider type, jurisdiction and one captured topic.
+The Hawaii request date controls effective periods. Dental and renewal topics share
+exception coverage. NED, PDMP and DEA questions share related prerequisite guidance.
+General licensing, internal and statutory topics are included. The question takes
+priority, and a known requirement topic is a fallback when the question is broad.
+Later eligibility checks use the retained topic rows. The vector path uses the
+captured active space. Each path keeps at most 20 ranks. Reciprocal rank fusion
 uses a constant of 60. Generation receives at most 12 passages and 24,000 passage
 characters, with room reserved for adjacent same-section qualifications. The
 answer agent has no mutation or network tools. Stored citations keep only references

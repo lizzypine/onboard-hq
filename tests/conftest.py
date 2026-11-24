@@ -39,7 +39,7 @@ def db_url() -> str:
     migrate_test_database(url)
     with psycopg.connect(url) as conn:
         conn.execute(
-            "TRUNCATE qa_citations,qa_claims,qa_retrieved_chunks,qa_corpus_versions,qa_runs,requirement_knowledge_links,knowledge_publications,knowledge_review_issues,knowledge_scopes,knowledge_embeddings,knowledge_chunks,knowledge_versions,checklist_edits,review_decisions,suggestions,update_ambiguities,update_requirement_snapshots,updates,requirements,providers,template_requirements,checklist_templates,requirement_definitions,provider_types"
+            "TRUNCATE qa_citations,qa_claims,qa_retrieved_chunks,qa_corpus_versions,qa_run_topics,qa_runs,requirement_knowledge_links,knowledge_publications,knowledge_review_issues,knowledge_scopes,knowledge_embeddings,knowledge_chunks,knowledge_versions,checklist_edits,review_decisions,suggestions,update_ambiguities,update_requirement_snapshots,updates,requirements,providers,template_requirements,checklist_templates,requirement_definitions,provider_types"
         )
         conn.execute(
             "UPDATE knowledge_state SET revision=0,active_space_id=(SELECT id FROM embedding_spaces WHERE model='text-embedding-3-small' AND version='1' AND dimensions=1536)"

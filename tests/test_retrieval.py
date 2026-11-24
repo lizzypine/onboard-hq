@@ -219,6 +219,9 @@ def test_offline_question_rubric_retrieves_required_source_versions_and_provenan
 
     published = asyncio.run(seed())
     failures = []
+    initial = next(
+        r for r in seeded_provider.requirements if r.name == "Hawaii dental license"
+    )
     for case in fixture["cases"]:
         outcome = case["outcome"]
         expected = []
@@ -251,7 +254,11 @@ def test_offline_question_rubric_retrieves_required_source_versions_and_provenan
         if outcome == "more_information_needed":
             output["missing_facts"] = "Synthetic missing-context check."
         install_model(TestModel(custom_output_args=output))
-        answer = ask(client, ask_body(seeded_provider, case["question"]))
+        # An initial dental-license row can still launch cross-topic questions.
+        context = (
+            {"requirement_id": initial.id} if case["id"] == "dea-prerequisite" else {}
+        )
+        answer = ask(client, ask_body(seeded_provider, case["question"], **context))
         import psycopg
 
         with psycopg.connect(db_url) as conn:
@@ -285,3 +292,153 @@ def test_offline_question_rubric_retrieves_required_source_versions_and_provenan
                     == item["quote"]
                 )
     assert failures == []
+
+
+def test_dental_ce_retrieves_only_applicable_scope_rows_despite_initial_license_hint(
+    client, db_url, seeded_provider
+):
+    import psycopg
+    from pydantic_ai.models.test import TestModel
+
+    from app.knowledge_models import KnowledgeScope
+    from app.repository.catalog import CatalogRepository
+    from tests.qa_fixtures import publish_passages
+    from tests.test_qa import ask, ask_body, evidence, install_model, supported
+
+    question = "How much dental continuing education is needed for renewal?"
+    expected_quote = "Dentists need continuing education for renewal."
+    revision = {"revision": "Fixture 1"}
+
+    def passages(text):
+        return [{"text": text, "section": "Renewal", "page": 1}]
+
+    async def seed():
+        async with create_pool(db_url) as pool:
+            await CatalogRepository(pool).ensure_version(
+                "Dental Hygienist", ["Synthetic requirement"], template_version=1
+            )
+            knowledge = KnowledgeRepository(pool)
+            renewal = await publish_passages(
+                knowledge, "board-renewal", revision, passages(expected_quote)
+            )
+            shared = await publish_passages(
+                knowledge,
+                "internal-guide",
+                revision,
+                passages("See the renewal guidance."),
+            )
+            ned = await publish_passages(
+                knowledge, "ned-instructions", revision, passages(question)
+            )
+            mixed = await publish_passages(
+                knowledge,
+                "ned-renewal",
+                revision,
+                passages(question),
+                scopes=[
+                    KnowledgeScope(
+                        provider_type="Dentist", jurisdiction="HI", topic="ned"
+                    ),
+                    KnowledgeScope(
+                        provider_type="Dental Hygienist",
+                        jurisdiction="HI",
+                        topic="renewal",
+                    ),
+                    KnowledgeScope(
+                        provider_type="Dentist", jurisdiction="CA", topic="renewal"
+                    ),
+                ],
+            )
+            return renewal, shared, ned, mixed
+
+    renewal, shared, ned, mixed = asyncio.run(seed())
+    install_model(
+        TestModel(
+            custom_output_args=supported(evidence(renewal.chunks[0].id, expected_quote))
+        )
+    )
+    initial_row = next(
+        r for r in seeded_provider.requirements if r.name == "Hawaii dental license"
+    )
+    answer = ask(
+        client, ask_body(seeded_provider, question, requirement_id=initial_row.id)
+    )
+    assert answer["topic_hint"] == "dental"
+    assert answer["outcome"] == "supported"
+    assert answer["claims"][0]["citations"][0]["version_id"] == renewal.id
+    with psycopg.connect(db_url) as conn:
+        membership = conn.execute(
+            "SELECT version_id FROM qa_corpus_versions WHERE run_id=%s", (answer["id"],)
+        ).fetchall()
+        ranked = conn.execute(
+            "SELECT version_id,keyword_rank,vector_rank FROM qa_retrieved_chunks WHERE run_id=%s",
+            (answer["id"],),
+        ).fetchall()
+        assert {version for (version,) in membership} == {renewal.id, shared.id}
+        assert {version for version, _, _ in ranked} == {renewal.id, shared.id}
+        assert any(
+            version == renewal.id and kw and cosine for version, kw, cosine in ranked
+        )
+        assert {ned.id, mixed.id}.isdisjoint(version for version, _, _ in ranked)
+        topics = conn.execute(
+            "SELECT topic FROM qa_run_topics WHERE run_id=%s", (answer["id"],)
+        ).fetchall()
+        assert {topic for (topic,) in topics} == {
+            "dental",
+            "renewal",
+            "internal",
+            "licensing",
+            "statutory",
+        }
+
+
+def test_newly_effective_unrelated_topic_does_not_stale_dental_answer(
+    client, db_url, seeded_provider
+):
+    from pydantic_ai.models.test import TestModel
+
+    from app.main import app
+    from app.qa_routes import get_qa_clock
+    from tests.qa_fixtures import publish_passages
+    from tests.test_qa import ask, ask_body, evidence, install_model, supported
+
+    day = date(2026, 11, 23)
+    app.dependency_overrides[get_qa_clock] = lambda: lambda: day
+    quote = "ADEX is required."
+
+    def passage(text):
+        return [{"section": "Application", "text": text, "page": 1}]
+
+    async def seed():
+        async with create_pool(db_url) as pool:
+            repo = KnowledgeRepository(pool)
+            await publish_passages(
+                repo,
+                "ned-instructions",
+                {"revision": "Future fixture", "effective_from": "2026-11-24"},
+                passage("NED application guidance."),
+            )
+            return await publish_passages(
+                repo,
+                "dentist-application",
+                {"revision": "Current fixture"},
+                passage(quote),
+            )
+
+    version = asyncio.run(seed())
+
+    class AfterMidnight(TestModel):
+        async def request(self, messages, model_settings, model_request_parameters):
+            nonlocal day
+            day = date(2026, 11, 24)
+            return await super().request(
+                messages, model_settings, model_request_parameters
+            )
+
+    install_model(
+        AfterMidnight(custom_output_args=supported(evidence(version.chunks[0].id)))
+    )
+    answer = ask(client, ask_body(seeded_provider))
+    assert answer["outcome"] == "supported"
+    assert answer["outdated"] is False
+    assert client.get(f"/qa/{answer['id']}").json() == answer

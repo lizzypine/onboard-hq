@@ -138,13 +138,14 @@ The embedding adapter shares the configured gateway/token. Its default model is 
 
 ## Saved licensing questions
 
-The licensing QA migration adds five tables for questions, captured source versions,
+The licensing QA migration adds six tables for questions, captured topics and source versions,
 retrieval ranks, claims and citations. In `/docs`, submit `POST /qa/ask` with a new
 UUID `request_id`, the selected integer `provider_id`, an optional
 `requirement_id` belonging to that provider, and the question. Both simulated
 roles can ask for active or archived providers. The server derives Hawaii and
-the selected provider type. Only reviewed guidance applicable on the Hawaii date
-of the request is eligible.
+the selected provider type. The question selects related topics and the requirement
+provides a fallback hint for broad questions. Both search paths use the same reviewed
+type, jurisdiction, topic and effective-period scope.
 
 `GET /qa/requests/{request_id}` reconciles an interrupted response.
 `GET /qa/{answer_id}` reopens a retained answer, and

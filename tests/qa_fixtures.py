@@ -25,6 +25,7 @@ async def publish_passages(
     jurisdiction="HI",
     embeddings=None,
     publish_now=True,
+    scopes=None,
 ):
     texts = [p["text"] for p in passages]
     text = "\n\n".join(texts)
@@ -42,7 +43,8 @@ async def publish_passages(
         stated_revision=metadata["revision"],
         effective_from=metadata.get("effective_from"),
         effective_to=metadata.get("effective_to"),
-        scopes=[
+        scopes=scopes
+        or [
             KnowledgeScope(
                 provider_type=provider_type, jurisdiction=jurisdiction, topic=topic
             )

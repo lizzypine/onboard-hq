@@ -475,6 +475,7 @@ def test_terminal_question_and_citation_evidence_are_immutable(
         for statement in (
             "UPDATE qa_runs SET state='processing' WHERE id=%s",
             "DELETE FROM qa_corpus_versions WHERE run_id=%s",
+            "DELETE FROM qa_run_topics WHERE run_id=%s",
             "UPDATE qa_retrieved_chunks SET context_order=NULL WHERE run_id=%s",
             "UPDATE qa_claims SET text='Replacement' WHERE run_id=%s",
             "UPDATE qa_citations SET quote='Forged' WHERE run_id=%s",
@@ -501,6 +502,7 @@ def test_provider_deletion_follows_existing_history_boundary_without_deleting_so
         for table in (
             "qa_runs",
             "qa_corpus_versions",
+            "qa_run_topics",
             "qa_retrieved_chunks",
             "qa_claims",
             "qa_citations",
@@ -548,3 +550,62 @@ def test_supported_answer_cannot_bypass_citations_with_freeform_explanation(
     output["explanation"] = "Your individual licensing application has been approved."
     install_model(TestModel(custom_output_args=output))
     assert_unavailable(ask(client, ask_body(seeded_provider)))
+
+
+def test_retry_read_stays_coherent_when_generation_commits_after_run_select(
+    client, seeded_provider, monkeypatch
+):
+    from app.repository.qa import ANSWER_SELECT
+
+    version = publish_text(client)
+    model_waiting = Event()
+    finish_model = Event()
+    original_done = Event()
+    interleaved = Event()
+
+    class WaitingModel(TestModel):
+        async def request(self, messages, model_settings, model_request_parameters):
+            model_waiting.set()
+            assert await asyncio.to_thread(finish_model.wait, 8)
+            return await super().request(
+                messages, model_settings, model_request_parameters
+            )
+
+    install_model(
+        WaitingModel(custom_output_args=supported(evidence(version["chunks"][0]["id"])))
+    )
+    actual_execute = psycopg.AsyncConnection.execute
+
+    async def execute(conn, query, *args, **kwargs):
+        cursor = await actual_execute(conn, query, *args, **kwargs)
+        # The server has produced the retry SELECT result. Complete the initial
+        # request before the retry can issue a second SELECT for evidence.
+        if (
+            model_waiting.is_set()
+            and not interleaved.is_set()
+            and isinstance(query, str)
+            and query.startswith(ANSWER_SELECT + "WHERE r.request_id=%s")
+        ):
+            interleaved.set()
+            finish_model.set()
+            assert await asyncio.to_thread(original_done.wait, 8)
+        return cursor
+
+    monkeypatch.setattr(psycopg.AsyncConnection, "execute", execute)
+    body = ask_body(seeded_provider)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        original = executor.submit(ask, client, body)
+        original.add_done_callback(lambda _: original_done.set())
+        try:
+            assert model_waiting.wait(5)
+            observed = ask(client, body)
+        finally:
+            finish_model.set()
+        completed = original.result(timeout=8)
+    assert interleaved.is_set()
+    assert observed["state"] == "processing"
+    assert observed["outcome"] is None
+    assert observed["claims"] == []
+    assert completed["outcome"] == "supported"
+    assert completed["claims"]
+    assert ask(client, body) == completed

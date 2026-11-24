@@ -40,8 +40,8 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 - `app/repository/knowledge.py` serializes source decisions and corpus changes. `knowledge_reads.py` reads coherent scope-filtered snapshots. `knowledge_writes.py` writes draft content, applicability and immutable operation receipts inside the caller's transaction.
 - `app/qa_routes.py` wires endpoints for saved, read-only licensing questions and reconciliation by request UUID.
 - `app/qa_models.py` defines question, candidate, structured draft, answer and citation contracts. `app/qa_agent.py` builds a tool-free answer agent with no automatic retries. `app/generation.py` shares the existing generation gateway configuration with extraction.
-- `app/qa.py` coordinates corpus capture, outbound calls without database connections, citation validation, and terminal persistence. `app/rules/qa.py` validates provider-type mentions and exact cited spans, and `app/retrieval.py` fuses keyword/vector ranks and selects bounded adjacent context.
-- `app/repository/qa.py` saves UUID request claims, corpus membership, candidate ranks and immutable terminal answers, and reads retained evidence with current applicability warnings.
+- `app/qa.py` coordinates corpus capture, outbound calls without database connections, citation validation, and terminal persistence. `app/rules/qa.py` resolves question topics and validates provider-type mentions and exact cited spans, and `app/retrieval.py` fuses keyword/vector ranks and selects bounded adjacent context.
+- `app/repository/qa.py` saves UUID request claims, topic and corpus membership, candidate ranks and immutable terminal answers, and reads retained evidence with current applicability warnings.
 - `app/agent.py`: the onboarding extraction agent and output models.
 - `app/updates.py`: extraction, scope filtering, and date-resolution orchestration. No HTTP or UI code.
 - `app/database.py`: environment configuration and PostgreSQL connection lifecycle. No routes or model calls.

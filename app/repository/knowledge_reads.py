@@ -94,11 +94,17 @@ ELIGIBLE_VERSIONS = """SELECT v.id FROM knowledge_versions v WHERE status='publi
     AND (effective_from IS NULL OR effective_from<=%(as_of)s)
     AND (effective_to IS NULL OR effective_to>=%(as_of)s)
     AND EXISTS (SELECT FROM knowledge_scopes s JOIN provider_types p ON p.id=s.provider_type_id
-        WHERE s.version_id=v.id AND p.name=%(provider_type)s AND s.jurisdiction=%(jurisdiction)s)"""
+        WHERE s.version_id=v.id AND p.name=%(provider_type)s AND s.jurisdiction=%(jurisdiction)s
+          AND (%(topics)s::text[] IS NULL OR lower(s.topic)=ANY(%(topics)s::text[])))"""
 
 
 async def eligible_version_ids(
-    conn: Conn, provider_type: str, jurisdiction: str, as_of: date
+    conn: Conn,
+    provider_type: str,
+    jurisdiction: str,
+    as_of: date,
+    *,
+    topics: list[str] | None = None,
 ) -> list[int]:
     rows = await (
         await conn.execute(
@@ -107,6 +113,7 @@ async def eligible_version_ids(
                 "as_of": as_of,
                 "provider_type": provider_type,
                 "jurisdiction": jurisdiction,
+                "topics": topics,
             },
         )
     ).fetchall()

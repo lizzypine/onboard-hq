@@ -24,7 +24,12 @@ from app.repository.knowledge_reads import (
     state,
 )
 from app.retrieval import PATH_LIMIT, merge_paths
-from app.rules.qa import QuestionConflict, QuestionScopeError, mismatched_type
+from app.rules.qa import (
+    QuestionConflict,
+    QuestionScopeError,
+    mismatched_type,
+    question_topics,
+)
 
 JURISDICTION = "HI"
 FAILURE_MESSAGE = "Licensing guidance is temporarily unavailable."
@@ -38,6 +43,7 @@ CURRENT_ELIGIBILITY = (
     ELIGIBLE_VERSIONS.replace("%(as_of)s", "%s")
     .replace("%(provider_type)s", "r.provider_type")
     .replace("%(jurisdiction)s", "r.jurisdiction")
+    .replace("%(topics)s", "ARRAY(SELECT topic FROM qa_run_topics WHERE run_id=r.id)")
 )
 ANSWER_SELECT = f"""
 SELECT r.id,r.request_id,r.provider_id,r.provider_name,r.provider_type,r.requirement_id,
@@ -131,11 +137,14 @@ async def _answers(
             version=record.pop("version"),
             dimensions=record.pop("dimensions"),
         )
+        # A processing retry can race a terminal commit after the run SELECT.
         results.append(
             SavedAnswer(
                 **record,
                 embedding_space=space,
-                claims=await _claims(conn, record["id"]),
+                claims=await _claims(conn, record["id"])
+                if record["state"] == "completed"
+                else [],
                 historical_source_warning=HISTORICAL_WARNING
                 if record["outdated"]
                 else None,
@@ -208,6 +217,9 @@ class QARepository:
             )
             provider_type = provider["provider_type"]
             name, topic = await _provider_context(conn, request, provider["type_id"])
+            topics = question_topics(
+                request.question, topic.casefold() if topic else None
+            )
             types = await (
                 await conn.execute("SELECT name FROM provider_types ORDER BY name")
             ).fetchall()
@@ -220,7 +232,7 @@ class QARepository:
             )
             revision, space = await state(conn, lock=True)
             versions = await eligible_version_ids(
-                conn, provider_type, JURISDICTION, as_of
+                conn, provider_type, JURISDICTION, as_of, topics=topics
             )
             inserted = await row(
                 conn,
@@ -247,6 +259,10 @@ class QARepository:
             )
             run_id = inserted["id"]
             async with conn.cursor() as cursor:
+                await cursor.executemany(
+                    "INSERT INTO qa_run_topics(run_id,topic) VALUES (%s,%s)",
+                    [(run_id, topic) for topic in topics],
+                )
                 await cursor.executemany(
                     "INSERT INTO qa_corpus_versions(run_id,version_id) VALUES (%s,%s)",
                     [(run_id, vid) for vid in versions],
@@ -339,13 +355,22 @@ class QARepository:
     ) -> SavedAnswer:
         async with connection(self.pool) as conn:
             revision, _ = await state(conn, lock=True)
-            current = await eligible_version_ids(
-                conn, capture.provider_type, JURISDICTION, as_of
-            )
-            outdated = revision != capture.revision or current != capture.version_ids
             await row(
                 conn, "SELECT id FROM qa_runs WHERE id=%s FOR UPDATE", (capture.id,)
             )
+            recorded_topics = await (
+                await conn.execute(
+                    "SELECT topic FROM qa_run_topics WHERE run_id=%s", (capture.id,)
+                )
+            ).fetchall()
+            current = await eligible_version_ids(
+                conn,
+                capture.provider_type,
+                JURISDICTION,
+                as_of,
+                topics=[r["topic"] for r in recorded_topics],
+            )
+            outdated = revision != capture.revision or current != capture.version_ids
             if draft is not None:
                 await _insert_claims(conn, capture.id, draft)
             await conn.execute(

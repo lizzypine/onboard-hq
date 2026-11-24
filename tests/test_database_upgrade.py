@@ -61,13 +61,13 @@ def test_populated_uuid_upgrade_preserves_history():
                 conn.execute(
                     "SELECT count(*) AS n FROM pg_constraint WHERE contype='f' AND connamespace='public'::regnamespace"
                 ).fetchone()["n"]
-                == 39
+                == 40
             )
             assert (
                 conn.execute(
                     "SELECT count(*) AS n FROM pg_tables WHERE schemaname='public' AND tablename <> 'schema_migrations'"
                 ).fetchone()["n"]
-                == 27
+                == 28
             )
 
 
