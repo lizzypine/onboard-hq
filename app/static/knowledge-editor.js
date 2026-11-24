@@ -1,8 +1,6 @@
 "use strict";
 
-import {action, dateOrUnknown, element, markdownPreview, metadata, officialLink, originalLink, versionPath} from "./knowledge-ui.js";
-
-const versionLabel = version => version.stated_revision || "Version " + version.id;
+import {action, dateOrUnknown, element, markdownPreview, metadata, officialLink, originalLink, versionLabel, versionPath} from "./knowledge-ui.js";
 
 function field(parent, label, value, type = "text") {
   const wrapper = element(parent, "label", label);
@@ -137,7 +135,7 @@ export function renderSourceEditor(parent, {version, document: doc, options, sel
     element(provenance, "summary", "Provenance and passage locations");
     const body = element(provenance, "div", "", "knowledge-citation-body");
     metadata(body, [
-      ["Version", versionLabel(version)], ["Publisher", doc.publisher],
+      ["Retained version", versionLabel(version.id, version.stated_revision)], ["Publisher", doc.publisher],
       ["Retrieved", dateOrUnknown(version.retrieved_at)], ["Reviewed", dateOrUnknown(version.reviewed_at)],
       ["Effective from", dateOrUnknown(version.effective_from)], ["Effective through", dateOrUnknown(version.effective_to)],
       ["SHA-256", version.checksum]
@@ -154,6 +152,7 @@ export function renderSourceEditor(parent, {version, document: doc, options, sel
   const label = element(form, "label", internal ? "Internal instructions" : "Extracted official text");
   const sourceText = element(label, "textarea");
   sourceText.value = version?.text || "";
+  const displayedText = sourceText.value;
   sourceText.readOnly = !edit || !internal;
   sourceText.required = true;
   sourceText.rows = 6;
@@ -170,7 +169,10 @@ export function renderSourceEditor(parent, {version, document: doc, options, sel
   const getDates = metadataFields(form, version, edit);
   const scopes = scopeEditor(form, version?.scopes || [options.default_scope], options, selectedType, edit);
   const reviewIssues = issueFields(form, version?.review_issues || [], edit);
-  const fields = () => ({text: sourceText.value, scopes, review_issues: reviewIssues(), ...getDates()});
+  const fields = () => ({
+    text: version && (sourceText.readOnly || sourceText.value === displayedText) ? version.text : sourceText.value,
+    scopes, review_issues: reviewIssues(), ...getDates()
+  });
   const original = JSON.stringify(fields());
   let locked = false;
   if (!edit) {

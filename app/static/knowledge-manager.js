@@ -1,7 +1,7 @@
 "use strict";
 
 import {renderSourceEditor} from "./knowledge-editor.js";
-import {action, byId, element, isUuid, readSavedIdentity, rememberIdentity, versionPath} from "./knowledge-ui.js";
+import {action, byId, element, isUuid, readSavedIdentity, rememberIdentity, versionLabel, versionPath} from "./knowledge-ui.js";
 
 const operationKey = "onboard-hq:pending-source-operation:v1";
 const manager = {"X-Demo-Role": "manager"};
@@ -21,10 +21,9 @@ export function setupKnowledgeManager({api, getRole, getProvider}) {
   const dismissers = [byId("dismiss-source-operation"), byId("dismiss-editor-operation")];
 
   const restored = readSavedIdentity(operationKey, null);
-  let pending = isUuid(restored?.id) ? restored : null;
+  let pending = isUuid(restored?.id) && Object.hasOwn(receipts, restored.action) ? restored : null;
   let checking = false;
   let dismissible = false;
-  let operationOrigin = null;
   let loading = null;
   let view = null;
   let focusKey = null;
@@ -35,7 +34,7 @@ export function setupKnowledgeManager({api, getRole, getProvider}) {
   function remember(operation) {
     pending = operation;
     dismissible = false;
-    rememberIdentity(operationKey, operation && {id: operation.id, action: operation.action});
+    rememberIdentity(operationKey, operation && {id: operation.id, action: operation.action, documentId: operation.documentId});
     syncRecovery();
   }
 
@@ -64,7 +63,7 @@ export function setupKnowledgeManager({api, getRole, getProvider}) {
         const line = element(versions, "div", "", "knowledge-source-version");
         const description = element(line, "div", "", "knowledge-source-description");
         element(description, "span", labels[version.status], "knowledge-badge " + version.status);
-        element(description, "span", version.stated_revision || "Version " + version.id, "knowledge-muted");
+        element(description, "span", versionLabel(version.id, version.stated_revision), "knowledge-muted");
         const label = version.status === "draft" ? "Review draft" : "View " + version.status + " version";
         const button = action(line, label, event => open(doc, version.id, event.currentTarget));
         button.dataset.sourceVersion = version.id;
@@ -86,7 +85,7 @@ export function setupKnowledgeManager({api, getRole, getProvider}) {
       if (!active() || loading !== token) return;
       renderCatalog(documents);
       catalogStatus.textContent = message || (pending && !pending.sending ? "A source operation needs confirmation." : "");
-      return true;
+      return documents;
     } catch {
       if (!active() || loading !== token) return;
       catalogStatus.textContent = message ? message + " The source catalog could not refresh." : "Licensing sources could not load.";
@@ -148,21 +147,27 @@ export function setupKnowledgeManager({api, getRole, getProvider}) {
     }
     const message = receipts[receipt.action];
     if (!active()) return;
-    const context = view;
-    let editorLoaded = true;
-    let catalogLoaded;
-    if (context && (context === operationOrigin || context.versionId === receipt.version_id)) {
+    const documents = await loadCatalog(message);
+    if (!active()) return;
+    const context = dialog.open ? view : null;
+    if (!documents) {
+      if (context) editorStatus.textContent = message + " The source catalog could not refresh.";
+      return;
+    }
+    const document = documents.find(doc => doc.versions.some(version => version.id === receipt.version_id));
+    if (!document || (operation.documentId != null && operation.documentId !== document.id)) {
+      throw new Error("Operation source did not match.");
+    }
+    const matchingCreate = operation.action === "create" && context?.versionId === null
+      && context.document.id === document.id;
+    if (context?.versionId === receipt.version_id || matchingCreate) {
       context.versionId = receipt.version_id;
       focusKey = {sourceVersion: receipt.version_id};
-      [editorLoaded, catalogLoaded] = await Promise.all([loadEditor(context, message), loadCatalog(message)]);
-    } else {
-      if (context) editorStatus.textContent = message;
-      catalogLoaded = await loadCatalog(message);
+      if (!await loadEditor(context, message)) return;
+    } else if (context) {
+      editorStatus.textContent = "The source operation was confirmed in the catalog.";
     }
-    if (catalogLoaded && (editorLoaded || !current(context))) {
-      operationOrigin = null;
-      remember(null);
-    }
+    remember(null);
   }
 
   async function reconcile() {
@@ -196,9 +201,9 @@ export function setupKnowledgeManager({api, getRole, getProvider}) {
     const base = versionPath(context.versionId);
     const path = {create: "/knowledge/documents/" + context.document.id + "/drafts", edit: base,
       publish: base + "/publish", withdraw: base + "/withdraw"}[kind];
-    const operation = {id, action: kind, sending: true};
+    const operation = {id, action: kind, sending: true,
+      documentId: kind === "create" ? context.document.id : undefined};
     remember(operation);
-    operationOrigin = context;
     editorStatus.textContent = kind === "publish" ? "Indexing and publishing source…" : "Saving source operation…";
     try {
       const receipt = await api(path, {method: kind === "edit" ? "PUT" : "POST",
@@ -236,7 +241,6 @@ export function setupKnowledgeManager({api, getRole, getProvider}) {
   reloadVersion.addEventListener("click", () => { if (view) loadEditor(view); });
   for (const button of checkers) button.addEventListener("click", reconcile);
   for (const button of dismissers) button.addEventListener("click", () => {
-    operationOrigin = null;
     remember(null);
     if (dialog.open) editorStatus.textContent = "Unconfirmed operation dismissed. Reload the saved version before deciding.";
     catalogStatus.textContent = "Unconfirmed operation dismissed.";

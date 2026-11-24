@@ -1,12 +1,18 @@
 """Ask AI stays scoped, read-only and usable while retaining cited answers."""
 
+from html import escape
 from urllib.parse import urlsplit
 
 import psycopg
 import pytest
 from playwright.sync_api import expect
 
-from tests.e2e.knowledge_data import QUOTE, create_source, publish_source
+from tests.e2e.knowledge_data import (
+    QUOTE,
+    create_source,
+    import_official,
+    publish_source,
+)
 from tests.e2e.test_provider_creation import fill_form, save_form
 
 RENEWAL_QUESTION = "When does renewal apply?"
@@ -87,6 +93,22 @@ def test_both_roles_can_ask_for_archived_providers(page, app_server, seeded_prov
     ).json()
     assert len(answers) == 2
     assert all(answer["requirement_id"] is None for answer in answers)
+
+
+def test_unlabelled_official_citation_identifies_its_retained_version(page, app_server):
+    raw = ("<h2>Board rules review</h2><p>" + escape(QUOTE) + "</p>").encode()
+    version = import_official(app_server, raw)
+    publish_source(page, app_server, version)
+    dialog = open_ask(page, app_server)
+    send(dialog, RENEWAL_QUESTION)
+    dialog.get_by_text("[1] Board of Dentistry laws and rules", exact=True).click()
+    expect(dialog.get_by_text("Official guidance", exact=True)).to_be_visible()
+    expect(dialog.get_by_text(f"Version {version}", exact=True)).to_be_visible()
+    dialog.get_by_role("button", name="View retained source").click()
+    retained = dialog.get_by_role("region", name="Retained source")
+    expect(retained).to_contain_text(f"Version {version}")
+    expect(retained).to_contain_text(QUOTE)
+    expect(retained.get_by_role("link", name="Official source")).to_be_visible()
 
 
 def test_exact_citation_retained_after_withdrawal_and_reload(

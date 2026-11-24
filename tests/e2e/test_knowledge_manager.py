@@ -2,6 +2,8 @@
 
 from uuid import uuid4
 
+import psycopg
+import pytest
 from playwright.sync_api import expect
 
 from tests.e2e.knowledge_data import (
@@ -95,7 +97,14 @@ def test_official_review_is_read_only_and_surfaces_stale_edits(page, app_server)
         "href", official["document"]["original_url"]
     )
     dialog.get_by_label("Stated source revision").fill("Synthetic official revision")
-    dialog.get_by_role("button", name="Save draft").click()
+    with page.expect_request(
+        lambda request: (
+            request.method == "PUT"
+            and request.url.endswith(f"/knowledge/versions/{version}")
+        )
+    ) as metadata_edit:
+        dialog.get_by_role("button", name="Save draft").click()
+    assert metadata_edit.value.post_data_json["text"] == official["text"]
     expect(dialog.get_by_text("Draft saved.", exact=True)).to_be_visible()
     page.keyboard.press("Escape")
     expect(trigger).to_be_focused()
@@ -125,6 +134,173 @@ def test_official_review_is_read_only_and_surfaces_stale_edits(page, app_server)
     expect(dialog.get_by_label("Stated source revision")).to_have_value(
         "Concurrent revision"
     )
+
+
+def test_metadata_edit_preserves_internal_source_original_and_locators(
+    page, app_server
+):
+    original_text = "# Synthetic section\r\n\r\nThis is line one.\rLine two.\r\n"
+    version = create_source(page, app_server, text=original_text)
+    path = app_server.url + f"/knowledge/versions/{version}"
+    before = page.request.get(path, headers=MANAGER).json()
+    assert before["text"] == original_text
+    section = manager_section(page, app_server)
+    dialog, _ = open_editor(page, section)
+    expect(dialog.get_by_label("Internal instructions")).to_have_value(
+        original_text.replace("\r\n", "\n").replace("\r", "\n")
+    )
+    dialog.get_by_label("Stated source revision").fill("Metadata revision")
+    dialog.get_by_role("button", name="Save draft").click()
+    expect(dialog.get_by_text("Draft saved.", exact=True)).to_be_visible()
+    after = page.request.get(path, headers=MANAGER).json()
+    assert after["stated_revision"] == "Metadata revision"
+    assert after["text"] == original_text
+    assert after["checksum"] == before["checksum"]
+    assert after["chunks"] == before["chunks"]
+    assert (
+        page.request.get(path + "/original", headers=MANAGER).body()
+        == original_text.encode()
+    )
+
+
+@pytest.mark.parametrize("reopen", ["same", "reload", "legacy", "different"])
+def test_create_receipt_recovers_matching_reopened_editor(page, app_server, reopen):
+    reload = reopen in {"reload", "legacy"}
+    other_title = "Synthetic alternate internal guide"
+    if reopen == "different":
+        with psycopg.connect(app_server.database_url) as connection:
+            connection.execute(
+                """INSERT INTO knowledge_documents(source_key,title,source_kind,publisher)
+                VALUES ('synthetic-alternate-guide',%s,'internal','Synthetic team')
+                ON CONFLICT(source_key) DO NOTHING""",
+                (other_title,),
+            )
+    section = manager_section(page, app_server)
+    held = []
+    path = "**/knowledge/documents/*/drafts"
+    storage_key = "onboard-hq:pending-source-operation:v1"
+    source = "Synthetic draft recovered in its original editor."
+
+    def hold(route):
+        response = route.fetch()
+        assert response.status == 201
+        held.append((route, response))
+        if reload:
+            route.abort()
+
+    page.route(path, hold)
+    dialog, _ = open_editor(page, section, action="Create internal draft")
+    dialog.get_by_label("Internal instructions").fill(source)
+    with page.expect_request(path) as created:
+        dialog.get_by_role("button", name="Create draft", exact=True).click()
+    operation_id = created.value.post_data_json["operation_id"]
+    document_id = int(created.value.url.split("/")[-2])
+    assert page.evaluate(
+        "key => JSON.parse(sessionStorage.getItem(key))", storage_key
+    ) == {"id": operation_id, "action": "create", "documentId": document_id}
+    if reload:
+        expect(
+            dialog.get_by_text(
+                "The source operation could not be confirmed.", exact=False
+            )
+        ).to_be_visible()
+    if reopen == "legacy":
+        page.evaluate(
+            "([key, id]) => sessionStorage.setItem(key, JSON.stringify({id, action: 'create'}))",
+            [storage_key, operation_id],
+        )
+    if reload:
+        recovery = []
+        page.route("**/knowledge/operations/*", lambda route: recovery.append(route))
+        with page.expect_request("**/knowledge/operations/*") as receipt:
+            section = manager_section(page, app_server)
+        assert receipt.value.url.endswith(operation_id)
+    else:
+        page.keyboard.press("Escape")
+    title = other_title if reopen == "different" else "Internal licensing guide"
+    dialog, _ = open_editor(page, section, title=title, action="Create internal draft")
+    if reopen == "different":
+        expect(dialog.get_by_label("Internal instructions")).to_be_disabled()
+    if reload:
+        recovery[0].continue_()
+    else:
+        held[0][0].fulfill(response=held[0][1])
+    if reopen == "different":
+        expect(dialog.get_by_label("Internal instructions")).to_be_editable()
+        expect(dialog.get_by_label("Internal instructions")).to_have_value("")
+        expect(
+            dialog.get_by_role("button", name="Create draft", exact=True)
+        ).to_be_visible()
+        expect(
+            section.get_by_role("article", name="Internal licensing guide").get_by_role(
+                "button", name="Review draft"
+            )
+        ).to_have_count(1)
+    else:
+        expect(dialog.get_by_label("Internal instructions")).to_have_value(source)
+        expect(
+            dialog.get_by_role("button", name="Save draft", exact=True)
+        ).to_be_visible()
+    expect(dialog.get_by_role("button", name="Check source operation")).to_be_hidden()
+    assert page.evaluate("key => sessionStorage.getItem(key)", storage_key) is None
+    assert len(held) == 1
+
+
+def test_lost_create_keeps_uuid_until_catalog_and_matching_editor_refresh(
+    page, app_server
+):
+    section = manager_section(page, app_server)
+    dialog, _ = open_editor(page, section, action="Create internal draft")
+    bodies = []
+    versions = []
+    storage_key = "onboard-hq:pending-source-operation:v1"
+    source = "Synthetic instructions with a recoverable create receipt."
+
+    def drop(route):
+        bodies.append(route.request.post_data_json)
+        saved = route.fetch()
+        assert saved.status == 201
+        versions.append(saved.json()["version_id"])
+        route.abort()
+
+    def unavailable(route):
+        route.fulfill(status=503, json={"detail": "Unavailable."})
+
+    page.route("**/knowledge/documents/*/drafts", drop)
+    dialog.get_by_label("Internal instructions").fill(source)
+    dialog.get_by_role("button", name="Create draft", exact=True).click()
+    expect(
+        dialog.get_by_text("The source operation could not be confirmed.", exact=False)
+    ).to_be_visible()
+    page.keyboard.press("Escape")
+    catalog_path = "**/knowledge/documents"
+    editor_path = f"**/knowledge/versions/{versions[0]}"
+    page.route(catalog_path, unavailable)
+    page.route(editor_path, unavailable)
+    dialog, _ = open_editor(page, section, action="Create internal draft")
+    expect(
+        section.get_by_text("The source catalog could not refresh.", exact=False)
+    ).to_have_count(1)
+    assert (
+        page.evaluate("key => JSON.parse(sessionStorage.getItem(key)).id", storage_key)
+        == bodies[0]["operation_id"]
+    )
+    page.unroute(catalog_path, unavailable)
+    check = dialog.get_by_role("button", name="Check source operation")
+    check.click()
+    expect(
+        dialog.get_by_text("The saved version could not refresh.", exact=False)
+    ).to_be_visible()
+    assert (
+        page.evaluate("key => JSON.parse(sessionStorage.getItem(key)).id", storage_key)
+        == bodies[0]["operation_id"]
+    )
+    page.unroute(editor_path, unavailable)
+    check.click()
+    expect(dialog.get_by_label("Internal instructions")).to_have_value(source)
+    expect(check).to_be_hidden()
+    assert page.evaluate("key => sessionStorage.getItem(key)", storage_key) is None
+    assert len(bodies) == 1
 
 
 def test_lost_publish_response_recovers_saved_receipt_without_replay(page, app_server):

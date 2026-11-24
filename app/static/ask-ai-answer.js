@@ -1,6 +1,6 @@
 "use strict";
 
-import {action, dateOrUnknown, element, metadata, officialLink, originalLink, versionPath} from "./knowledge-ui.js";
+import {action, dateOrUnknown, element, metadata, officialLink, originalLink, versionLabel, versionPath} from "./knowledge-ui.js";
 
 export const outcomes = {
   supported: "Supported answer",
@@ -26,7 +26,7 @@ function retainedSource(parent, citation, {api, getRole}) {
       const version = await api(versionPath(citation.version_id), {headers: {"X-Demo-Role": getRole()}});
       view.replaceChildren();
       element(view, "h4", "Retained source");
-      element(view, "p", version.document.title + " · " + version.status);
+      element(view, "p", [version.document.title, versionLabel(version.id, version.stated_revision), version.status].join(" · "));
       const links = element(view, "div", "", "knowledge-actions");
       originalLink(links, version.id);
       officialLink(links, version.document.original_url);
@@ -48,7 +48,7 @@ function renderCitation(parent, citation, number, options) {
   element(body, "blockquote", citation.quote);
   const rows = [
     ["Authority", citation.publisher],
-    ["Revision", citation.stated_revision],
+    ["Retained version", versionLabel(citation.version_id, citation.stated_revision)],
     ["Section", citation.section],
     ["Page", citation.page],
     ["Characters", citation.char_start + "–" + citation.char_end],

@@ -3,6 +3,7 @@
 export const byId = id => document.getElementById(id);
 export const dateOrUnknown = value => value ? value.slice(0, 10) : "Unknown";
 export const versionPath = id => "/knowledge/versions/" + id;
+export const versionLabel = (id, revision) => "Version " + id + (revision ? " · " + revision : "");
 
 export function element(parent, tag, value = "", className = "") {
   const node = document.createElement(tag);

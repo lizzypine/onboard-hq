@@ -50,9 +50,10 @@ def publish_source(page, server, version):
     assert response.ok, response.text()
 
 
-def import_official(server):
+def import_official(
+    server, raw=b"<h2>Board rules review</h2><p>Synthetic official guidance.</p>"
+):
     source = source_by_key("board-laws")
-    raw = b"<h2>Board rules review</h2><p>Synthetic official guidance.</p>"
     parsed = extract_source(raw, source.media_type)
     request = DraftRequest(
         operation_id=uuid4(),
@@ -63,7 +64,13 @@ def import_official(server):
     async def save():
         async with create_pool(server.database_url) as pool:
             return await KnowledgeRepository(pool).create_draft(
-                0, request, raw, source.media_type, parsed, sha256(raw).hexdigest(), source
+                0,
+                request,
+                raw,
+                source.media_type,
+                parsed,
+                sha256(raw).hexdigest(),
+                source,
             )
 
     return run_async(save).version_id
