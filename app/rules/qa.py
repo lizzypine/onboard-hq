@@ -4,64 +4,41 @@ import re
 from collections.abc import Iterable
 
 from app.qa_models import AnswerDraft, RankedPassage
-
-DENTAL_TOPICS = frozenset({"dental", "renewal"})
-CONTROLLED_SUBSTANCE_TOPICS = frozenset({"ned", "dea", "pdmp"})
-SHARED_TOPICS = frozenset({"licensing", "internal", "statutory"})
-
-DENTAL_TERMS = frozenset(
-    {
-        "adex",
-        "biennial",
-        "biennium",
-        "ce",
-        "dental",
-        "dentist",
-        "dentists",
-        "ethics",
-        "har",
-        "periodontal",
-    }
-)
-CONTROLLED_SUBSTANCE_TERMS = frozenset(
-    {
-        "csr",
-        "dea",
-        "ned",
-        "pdmp",
-        "prescriber",
-        "prescribers",
-        "prescribing",
-    }
+from app.rules.knowledge import (
+    CONTROLLED_SUBSTANCE_TOPICS,
+    DENTAL_TOPICS,
+    SHARED_TOPICS,
+    SUPPORTED_TOPICS,
 )
 
+DENTAL_TERMS = frozenset({"adex", "ce", "periodontal"})
+CONTROLLED_SUBSTANCE_TERMS = frozenset({"csr", "dea", "ned", "pdmp"})
 
-def question_topics(question: str, hint: str | None) -> list[str]:
-    """Use explicit intent first and keep related exceptions within each topic group."""
-    normalized = " ".join(re.findall(r"\w+", question.casefold()))
-    words = set(normalized.split())
-    topics = set(SHARED_TOPICS)
-    dental = bool(words & DENTAL_TERMS) or bool(
-        re.search(r"\bcontinuing ed(?:ucation)?\b", normalized)
+
+def question_topics(question: str) -> list[str]:
+    """Narrow on clear question signals and search all topics when intent is broad."""
+    words = re.findall(r"\w+", question.casefold())
+    normalized = " ".join(words)
+    dental = not DENTAL_TERMS.isdisjoint(words) or bool(
+        re.search(
+            r"\b(?:continuing ed(?:ucation)?|dental (?:renewal|licen[cs](?:e|es|ing)))\b",
+            normalized,
+        )
     )
-    controlled = bool(words & CONTROLLED_SUBSTANCE_TERMS) or any(
+    controlled = not CONTROLLED_SUBSTANCE_TERMS.isdisjoint(words) or any(
         phrase in normalized
         for phrase in (
             "controlled substance",
             "drug enforcement administration",
             "narcotics enforcement division",
+            "prescriber education",
             "prescription drug monitoring program",
         )
     )
-    if not dental and not controlled:
-        normalized_hint = hint.casefold() if hint else None
-        dental = normalized_hint not in CONTROLLED_SUBSTANCE_TOPICS
-        controlled = normalized_hint not in DENTAL_TOPICS
-    if dental:
-        topics.update(DENTAL_TOPICS)
-    if controlled:
-        topics.update(CONTROLLED_SUBSTANCE_TOPICS)
-    return sorted(topics)
+    if dental == controlled:
+        return sorted(SUPPORTED_TOPICS)
+    selected = DENTAL_TOPICS if dental else CONTROLLED_SUBSTANCE_TOPICS
+    return sorted(selected | SHARED_TOPICS)
 
 
 class QuestionConflict(ValueError):

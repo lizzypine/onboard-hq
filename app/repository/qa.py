@@ -217,9 +217,7 @@ class QARepository:
             )
             provider_type = provider["provider_type"]
             name, topic = await _provider_context(conn, request, provider["type_id"])
-            topics = question_topics(
-                request.question, topic.casefold() if topic else None
-            )
+            topics = question_topics(request.question)
             types = await (
                 await conn.execute("SELECT name FROM provider_types ORDER BY name")
             ).fetchall()

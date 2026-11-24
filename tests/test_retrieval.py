@@ -3,6 +3,8 @@
 import asyncio
 from datetime import date
 
+import pytest
+
 from app.database import create_pool
 from app.repository.knowledge import KnowledgeRepository
 from tests.test_knowledge import create, internal_id, publish
@@ -442,3 +444,136 @@ def test_newly_effective_unrelated_topic_does_not_stale_dental_answer(
     assert answer["outcome"] == "supported"
     assert answer["outdated"] is False
     assert client.get(f"/qa/{answer['id']}").json() == answer
+
+
+@pytest.mark.parametrize(
+    "question,requirement,topic,source,quote",
+    [
+        (
+            "Is Form 224a used for renewal?",
+            "Hawaii dental license",
+            "dental",
+            "dea-registration",
+            "Use Form 224a for renewal.",
+        ),
+        (
+            "Do I need in-person BLS skills under the virtual waiver?",
+            "State NED license",
+            "ned",
+            "virtual-ce-waiver",
+            "BLS skills must be demonstrated in person.",
+        ),
+    ],
+)
+def test_unidentified_question_family_reaches_cross_topic_source_in_either_row(
+    client, db_url, seeded_provider, question, requirement, topic, source, quote
+):
+    from pydantic_ai.models.test import TestModel
+
+    from tests.qa_fixtures import publish_passages
+    from tests.test_qa import ask, ask_body, evidence, install_model
+
+    async def seed():
+        async with create_pool(db_url) as pool:
+            return await publish_passages(
+                KnowledgeRepository(pool),
+                source,
+                {"revision": "Synthetic scope test"},
+                [{"section": "Renewal", "page": None, "text": quote}],
+            )
+
+    version = asyncio.run(seed())
+    install_model(
+        TestModel(
+            custom_output_args={
+                "outcome": "supported",
+                "claims": [
+                    {
+                        "text": quote,
+                        "citations": [evidence(version.chunks[0].id, quote)],
+                    }
+                ],
+            }
+        )
+    )
+    requirement_id = next(
+        r.id for r in seeded_provider.requirements if r.name == requirement
+    )
+    answer = ask(
+        client, ask_body(seeded_provider, question, requirement_id=requirement_id)
+    )
+    assert answer["topic_hint"] == topic
+    assert answer["outcome"] == "supported", question
+    assert answer["claims"][0]["citations"][0]["version_id"] == version.id
+
+
+def test_broad_questions_from_either_row_retrieve_all_configured_topics(
+    client, db_url, seeded_provider
+):
+    import psycopg
+
+    from app.knowledge_models import KnowledgeScope
+    from app.knowledge_sources import manifest
+    from tests.qa_fixtures import publish_passages
+    from tests.test_qa import ask, ask_body
+
+    by_topic = {source.topic: source.source_key for source in manifest()}
+    extras = {"statutory", "internal"}
+
+    async def seed():
+        async with create_pool(db_url) as pool:
+            repo = KnowledgeRepository(pool)
+            versions = []
+            for topic, source in by_topic.items():
+                labels = {topic} | (extras if source == "internal-guide" else set())
+                versions.append(
+                    await publish_passages(
+                        repo,
+                        source,
+                        {"revision": "Synthetic scope test"},
+                        [
+                            {
+                                "section": "Renewal",
+                                "page": None,
+                                "text": "Review license renewal guidance.",
+                            }
+                        ],
+                        scopes=[
+                            KnowledgeScope(
+                                provider_type="Dentist", jurisdiction="HI", topic=label
+                            )
+                            for label in sorted(labels)
+                        ],
+                        publish_now=False,
+                    )
+                )
+            return versions
+
+    versions = asyncio.run(seed())
+    for version in versions:
+        response = publish(client, version.id)
+        assert response.status_code == 200, response.text
+    for requirement in ("Hawaii dental license", "State NED license"):
+        requirement_id = next(
+            r.id for r in seeded_provider.requirements if r.name == requirement
+        )
+        answer = ask(
+            client,
+            ask_body(
+                seeded_provider,
+                "Which renewal guidance applies?",
+                requirement_id=requirement_id,
+            ),
+        )
+        with psycopg.connect(db_url) as conn:
+            captured = conn.execute(
+                "SELECT topic FROM qa_run_topics WHERE run_id=%s", (answer["id"],)
+            ).fetchall()
+            ranked = conn.execute(
+                "SELECT version_id,keyword_rank,vector_rank FROM qa_retrieved_chunks WHERE run_id=%s",
+                (answer["id"],),
+            ).fetchall()
+        assert {row[0] for row in captured} == by_topic.keys() | extras
+        assert {vid for vid, keyword, vector in ranked if keyword and vector} == {
+            version.id for version in versions
+        }

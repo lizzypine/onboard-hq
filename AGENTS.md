@@ -35,7 +35,7 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 - `app/static/statuses.js`: safe native status dropdown and labeled badge DOM helpers; choices and tones come from the dashboard.
 - `app/static/review.js`: one suggestion's editable checklist comparison, draft date actions, validation, and manager decision callbacks. No data loading or persistence.
 - `app/dependencies.py` shares the FastAPI pool dependency. `app/knowledge_routes.py` wires source endpoints.
-- `app/knowledge_models.py` defines retained-source, passage, scope, operation and corpus contracts. `app/knowledge.py` orchestrates Manager review, publication and reindexing. `app/rules/knowledge.py` validates source roles, revisions, retried operations and embedding identity.
+- `app/knowledge_models.py` defines retained-source, passage, scope, operation and corpus contracts. `app/knowledge.py` orchestrates Manager review, publication and reindexing. `app/rules/knowledge.py` defines the shared publication and retrieval topic vocabulary and validates source roles, revisions, retried operations and embedding identity.
 - `app/knowledge_sources.py` handles bounded manifest fetching and the explicit source CLI. `app/source_extraction.py` preserves passage text and page/section offsets. `app/embeddings.py` owns the independent, validated embedding adapter.
 - `app/repository/knowledge.py` serializes source decisions and corpus changes. `knowledge_reads.py` reads coherent scope-filtered snapshots. `knowledge_writes.py` writes draft content, applicability and immutable operation receipts inside the caller's transaction.
 - `app/qa_routes.py` wires endpoints for saved, read-only licensing questions and reconciliation by request UUID.

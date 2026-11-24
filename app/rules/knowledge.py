@@ -6,6 +6,11 @@ from pydantic import BaseModel
 
 from app.knowledge_models import EmbeddingSpace, KnowledgeDocument, KnowledgeVersion
 
+DENTAL_TOPICS = frozenset({"dental", "renewal"})
+CONTROLLED_SUBSTANCE_TOPICS = frozenset({"ned", "dea", "pdmp"})
+SHARED_TOPICS = frozenset({"licensing", "internal", "statutory"})
+SUPPORTED_TOPICS = DENTAL_TOPICS | CONTROLLED_SUBSTANCE_TOPICS | SHARED_TOPICS
+
 
 class KnowledgeForbidden(ValueError):
     pass
@@ -56,6 +61,11 @@ def require_publishable(version: KnowledgeVersion, confirmed: bool) -> None:
     ):
         raise KnowledgeInvalid(
             "Confirm review and resolve all issues before publishing."
+        )
+
+    if any(scope.topic.lower() not in SUPPORTED_TOPICS for scope in version.scopes):
+        raise KnowledgeInvalid(
+            "Use supported scope topics: " + ", ".join(sorted(SUPPORTED_TOPICS)) + "."
         )
 
 

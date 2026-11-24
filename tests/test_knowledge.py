@@ -406,3 +406,39 @@ def test_source_operation_waits_for_embedding_space_activation(
                 assert result is None
 
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("label", ["continuing education", "reneweal"])
+def test_unsupported_topic_draft_remains_readable_and_publication_fails_before_embedding(
+    client, db_url, label
+):
+    from app.embeddings import get_embedding_client
+    from app.main import app
+    from tests.knowledge_fixtures import BrokenEmbeddings, SyntheticEmbeddings
+
+    version = create(client, internal_id(client), scopes=[SCOPE | {"topic": label}])
+    assert client.get(f"/knowledge/versions/{version}", headers=MANAGER).json()[
+        "scopes"
+    ] == [SCOPE | {"topic": label}]
+
+    app.dependency_overrides[get_embedding_client] = BrokenEmbeddings
+    blocked = publish(client, version)
+    assert blocked.status_code == 422, blocked.text
+    assert "scope topics" in blocked.json()["detail"]
+    assert "renewal" in blocked.json()["detail"]
+    with psycopg.connect(db_url) as conn:
+        assert conn.execute(
+            "SELECT status FROM knowledge_versions WHERE id=%s", (version,)
+        ).fetchone() == ("draft",)
+        assert conn.execute("SELECT count(*) FROM knowledge_embeddings").fetchone() == (
+            0,
+        )
+
+    corrected = client.put(
+        f"/knowledge/versions/{version}",
+        json=content(scopes=[SCOPE | {"topic": "Renewal"}], expected_revision=1),
+        headers=MANAGER,
+    )
+    assert corrected.status_code == 200, corrected.text
+    app.dependency_overrides[get_embedding_client] = SyntheticEmbeddings
+    assert publish(client, version, revision=2).status_code == 200

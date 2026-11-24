@@ -132,7 +132,7 @@ List configured source identifiers with `uv run python -m app.knowledge_sources 
 
 A fresh database starts with an empty published corpus. Each official source must be reachable at its configured URL, return its expected PDF or HTML content type, and pass extraction before Manager review. The official NED practitioner instructions and 2026 prescriber education entries were successfully fetched during source verification. If an official server is temporarily unavailable, retry the configured source import after it recovers.
 
-The Manager source API in `/docs` accepts independent UUID operation IDs, the current draft revision and the simulated Manager header. Managers can correct internal text, review scopes and issues, confirm publication, or withdraw a published version. Official source content is replaced through a new controlled import. Retained originals are available as downloads. Source review is required before information is available to retrieval.
+The Manager source API in `/docs` accepts independent UUID operation IDs, the current draft revision and the simulated Manager header. Managers can correct internal text, review scopes and issues, confirm publication, or withdraw a published version. Official source content is replaced through a new controlled import. Retained originals are available as downloads. Source review is required before information is available to retrieval. A draft can retain an unresolved topic label. Before publication, choose a supported topic such as `renewal`. The publication response lists the supported labels if a scope topic needs correction. New topic families require configuration.
 
 The embedding adapter shares the configured gateway/token. Its default model is `text-embedding-3-small`, version `1`, with 1536 dimensions. After changing `EMBEDDING_MODEL`, `EMBEDDING_VERSION` or `EMBEDDING_DIMENSIONS`, explicitly run `uv run --env-file .env python -m app.knowledge_sources activate-space` against the intended development database. It embeds published passages outside transactions and activates the new space after all vectors are ready. A concurrent publication requires restarting the reindex.
 
@@ -143,9 +143,10 @@ retrieval ranks, claims and citations. In `/docs`, submit `POST /qa/ask` with a 
 UUID `request_id`, the selected integer `provider_id`, an optional
 `requirement_id` belonging to that provider, and the question. Both simulated
 roles can ask for active or archived providers. The server derives Hawaii and
-the selected provider type. The question selects related topics and the requirement
-provides a fallback hint for broad questions. Both search paths use the same reviewed
-type, jurisdiction, topic and effective-period scope.
+the selected provider type. Clear question intent selects related topics. Broad and
+unrecognized questions search all supported topics within the selected provider scope.
+A linked requirement provides context for the answer. Both search paths use the same
+reviewed type, jurisdiction, topic and effective-period scope.
 
 `GET /qa/requests/{request_id}` reconciles an interrupted response.
 `GET /qa/{answer_id}` reopens a retained answer, and

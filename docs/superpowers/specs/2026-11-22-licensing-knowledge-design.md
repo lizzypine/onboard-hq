@@ -148,9 +148,10 @@ provider reconciles the same request/result through the saved request identity.
 Display the selected provider type and topic context. Use Hawaii Dentist scope
 and allow questions to cross related dental/NED/DEA topics. Renewal/CE questions
 must retrieve renewal material even when launched from an initial-license guide.
-The question's intent narrows topic retrieval; a row context is a hint, not an
-instruction to exclude a relevant exception or related topic. Reject an explicitly
-incompatible provider-type query rather than applying Dentist rules to a Hygienist.
+Clear question intent narrows topic retrieval. Ambiguous and unrecognized
+questions search all supported topics within the reviewed provider scope.
+Requirement context provides a hint for the answer. Reject an explicitly
+incompatible provider-type query.
 
 Answers contain a concise response, relevant qualifications, and numbered citations.
 Expanding a citation reveals the verbatim passage, document title, authority,
@@ -186,7 +187,10 @@ Do not promise unsaved form persistence across a page reload.
 Managers maintain internal instructions through a plain-text/Markdown draft editor
 with a rendered preview. Render safely without arbitrary HTML. A draft identifies
 its topic/provider applicability and unresolved contact/address placeholders.
-A Manager explicitly publishes a reviewed immutable version. Maintain draft,
+A Manager explicitly publishes a reviewed immutable version. Use the configured
+topic vocabulary shared with retrieval. A draft can keep an unresolved label
+while the Manager reviews it. Every topic must be supported before publication
+or embedding. Custom topics require configuration. Maintain draft,
 published, superseded, and withdrawn states; retain publication/withdrawal history
 and the simulated Manager role, without claiming an authenticated named author.
 Drafts and withdrawn versions are excluded from new answers.

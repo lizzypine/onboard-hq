@@ -652,8 +652,11 @@ Both search paths use the same captured published version IDs. Each version need
 one reviewed scope row matching provider type, jurisdiction and one captured topic.
 The Hawaii request date controls effective periods. Dental and renewal topics share
 exception coverage. NED, PDMP and DEA questions share related prerequisite guidance.
-General licensing, internal and statutory topics are included. The question takes
-priority, and a known requirement topic is a fallback when the question is broad.
+General licensing, internal and statutory topics are included. Clear question
+intent selects a topic family. Ambiguous and unrecognized questions search all
+supported topics within the provider scope. The requirement hint provides answer
+context. A source can retain an unresolved topic in draft. Publication uses the
+same configured vocabulary as retrieval and checks every topic before embedding.
 Later eligibility checks use the retained topic rows. The vector path uses the
 captured active space. Each path keeps at most 20 ranks. Reciprocal rank fusion
 uses a constant of 60. Generation receives at most 12 passages and 24,000 passage
