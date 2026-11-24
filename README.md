@@ -130,11 +130,36 @@ The source foundation adds ten application tables. Disposable PostgreSQL 18 need
 
 List configured source identifiers with `uv run python -m app.knowledge_sources list`. In an explicitly selected development database with the migration and Dentist catalog, `uv run --env-file .env python -m app.knowledge_sources ingest SOURCE_ID` retrieves one configured source and saves a reviewable draft. Use `internal-guide` for the sanitized internal checklist. The CLI rejects unlisted URLs and redirects. A failed fetch leaves the existing published version available. Missing review/effective dates remain unknown.
 
-A fresh database starts with an empty published corpus. Each official source must be reachable at its configured URL, return its expected PDF or HTML content type, and pass extraction before Manager review. During source verification, direct retrieval of the NED practitioner instructions and 2026 prescriber education form returned HTTP errors. Those entries can be retried when the official endpoints accept the request. The CLI accepts configured source identifiers only.
+A fresh database starts with an empty published corpus. Each official source must be reachable at its configured URL, return its expected PDF or HTML content type, and pass extraction before Manager review. The official NED practitioner instructions and 2026 prescriber education entries were successfully fetched during source verification. If an official server is temporarily unavailable, retry the configured source import after it recovers.
 
 The Manager source API in `/docs` accepts independent UUID operation IDs, the current draft revision and the simulated Manager header. Managers can correct internal text, review scopes and issues, confirm publication, or withdraw a published version. Official source content is replaced through a new controlled import. Retained originals are available as downloads. Source review is required before information is available to retrieval.
 
 The embedding adapter shares the configured gateway/token. Its default model is `text-embedding-3-small`, version `1`, with 1536 dimensions. After changing `EMBEDDING_MODEL`, `EMBEDDING_VERSION` or `EMBEDDING_DIMENSIONS`, explicitly run `uv run --env-file .env python -m app.knowledge_sources activate-space` against the intended development database. It embeds published passages outside transactions and activates the new space after all vectors are ready. A concurrent publication requires restarting the reindex.
+
+## Saved licensing questions
+
+The licensing QA migration adds five tables for questions, captured source versions,
+retrieval ranks, claims and citations. In `/docs`, submit `POST /qa/ask` with a new
+UUID `request_id`, the selected integer `provider_id`, an optional
+`requirement_id` belonging to that provider, and the question. Both simulated
+roles can ask for active or archived providers. The server derives Hawaii and
+the selected provider type. Only reviewed guidance applicable on the Hawaii date
+of the request is eligible.
+
+`GET /qa/requests/{request_id}` reconciles an interrupted response.
+`GET /qa/{answer_id}` reopens a retained answer, and
+`GET /providers/{provider_id}/answers` lists that provider’s question history.
+Identical submissions return the existing result or processing receipt. Reusing
+a request UUID with changed input returns 409. Each answer records its outcome,
+claims and exact retained citations. Service failures have a distinct outcome.
+A source change or date change that affects applicability can mark a retained
+answer outdated. Ask a new question with a new UUID for current guidance.
+Questions and answers are separate from onboarding progress and review history.
+
+The licensing question fixtures exercise exact hybrid retrieval and citation
+plumbing using source-bound excerpts, deterministic embeddings and TestModel
+on a disposable local database. The same fixtures record the semantic evaluation
+rubric. Live model quality has not been measured.
 
 ## What this feature does
 

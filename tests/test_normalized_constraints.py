@@ -85,8 +85,8 @@ def test_target_rejects_wrong_owners_versions_duplicates_and_invalid_values():
                     )
                 ).fetchall()
                 assert {row["confdeltype"]: row["n"] for row in policies} == {
-                    "c": 11,
-                    "r": 17,
+                    "c": 18,
+                    "r": 21,
                 }
                 collections = await (
                     await conn.execute(
@@ -99,7 +99,7 @@ def test_target_rejects_wrong_owners_versions_duplicates_and_invalid_values():
                         "SELECT table_name,data_type,identity_generation FROM information_schema.columns WHERE table_schema='public' AND column_name='id'"
                     )
                 ).fetchall()
-                assert len(ids) == 15
+                assert len(ids) == 16
                 assert all(
                     row["data_type"] == "integer"
                     and row["identity_generation"] == "ALWAYS"

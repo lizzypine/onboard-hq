@@ -15,7 +15,9 @@ class EmbeddingUnavailable(RuntimeError):
 class EmbeddingClient(Protocol):
     model: str
     version: str
-    dimensions: int
+
+    @property
+    def dimensions(self) -> int: ...
 
     async def embed(self, texts: list[str]) -> list[list[float]]: ...
 
@@ -40,12 +42,17 @@ class GatewayEmbeddings:
     def __init__(self) -> None:
         self.model = os.environ.get("EMBEDDING_MODEL", "text-embedding-3-small")
         self.version = os.environ.get("EMBEDDING_VERSION", "1")
+        self._configured_dimensions = os.environ.get("EMBEDDING_DIMENSIONS", "1536")
+
+    @property
+    def dimensions(self) -> int:
         try:
-            self.dimensions = int(os.environ.get("EMBEDDING_DIMENSIONS", "1536"))
-            if not 1 <= self.dimensions <= 16000:
-                raise ValueError
+            dimensions = int(self._configured_dimensions)
+            if 1 <= dimensions <= 16000:
+                return dimensions
         except ValueError:
-            raise EmbeddingUnavailable("Invalid embedding configuration.") from None
+            pass
+        raise EmbeddingUnavailable("Invalid embedding configuration.")
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         if os.environ.get("DISABLE_EMBEDDING_REQUESTS") == "1":

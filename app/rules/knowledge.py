@@ -4,7 +4,7 @@ import hashlib
 
 from pydantic import BaseModel
 
-from app.knowledge_models import EmbeddingSpace, KnowledgeVersion
+from app.knowledge_models import EmbeddingSpace, KnowledgeDocument, KnowledgeVersion
 
 
 class KnowledgeForbidden(ValueError):
@@ -22,6 +22,24 @@ class KnowledgeInvalid(ValueError):
 def require_manager(role: str) -> None:
     if role != "manager":
         raise KnowledgeForbidden("A simulated Manager is required.")
+
+
+def require_visible_version(role: str, status: str) -> None:
+    if status == "draft":
+        require_manager(role)
+
+
+def visible_documents(
+    documents: list[KnowledgeDocument], role: str
+) -> list[KnowledgeDocument]:
+    if role == "manager":
+        return documents
+    visible = []
+    for document in documents:
+        versions = [v for v in document.versions if v.status != "draft"]
+        if versions:
+            visible.append(document.model_copy(update={"versions": versions}))
+    return visible
 
 
 def require_revision(version: KnowledgeVersion, revision: int, status: str) -> None:

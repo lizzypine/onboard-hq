@@ -14,6 +14,7 @@ from app.knowledge_models import (
     KnowledgeDocument,
     KnowledgeScope,
     KnowledgeVersion,
+    Media,
     OperationReceipt,
     VersionSummary,
 )
@@ -89,6 +90,41 @@ async def version_read(conn: Conn, vid: int) -> KnowledgeVersion:
     )
 
 
+ELIGIBLE_VERSIONS = """SELECT v.id FROM knowledge_versions v WHERE status='published'
+    AND (effective_from IS NULL OR effective_from<=%(as_of)s)
+    AND (effective_to IS NULL OR effective_to>=%(as_of)s)
+    AND EXISTS (SELECT FROM knowledge_scopes s JOIN provider_types p ON p.id=s.provider_type_id
+        WHERE s.version_id=v.id AND p.name=%(provider_type)s AND s.jurisdiction=%(jurisdiction)s)"""
+
+
+async def eligible_version_ids(
+    conn: Conn, provider_type: str, jurisdiction: str, as_of: date
+) -> list[int]:
+    rows = await (
+        await conn.execute(
+            ELIGIBLE_VERSIONS + " ORDER BY v.id",
+            {
+                "as_of": as_of,
+                "provider_type": provider_type,
+                "jurisdiction": jurisdiction,
+            },
+        )
+    ).fetchall()
+    return [record["id"] for record in rows]
+
+
+async def snapshot_of(
+    conn: Conn, revision: int, space: EmbeddingSpace, version_ids: list[int]
+) -> CorpusSnapshot:
+    versions = [await version_read(conn, vid) for vid in version_ids]
+    return CorpusSnapshot(
+        revision=revision,
+        active_space=space,
+        versions=versions,
+        chunks=[chunk for version in versions for chunk in version.chunks],
+    )
+
+
 async def replay(conn: Conn, key: UUID, digest: str) -> OperationReceipt | None:
     saved = await (
         await conn.execute(
@@ -139,7 +175,7 @@ class KnowledgeReads:
             )
             return await version_read(conn, version_id)
 
-    async def original(self, vid: int) -> tuple[str, str, bytes]:
+    async def original(self, vid: int) -> tuple[str, Media, bytes]:
         async with connection(self.pool) as conn:
             v = await row(
                 conn,
@@ -186,22 +222,8 @@ class KnowledgeReads:
                 "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
             )
             revision, space = await state(conn)
-            ids = await (
-                await conn.execute(
-                    """SELECT v.id FROM knowledge_versions v WHERE status='published'
-                AND (effective_from IS NULL OR effective_from<=%s) AND (effective_to IS NULL OR effective_to>=%s)
-                AND EXISTS (SELECT FROM knowledge_scopes s JOIN provider_types p ON p.id=s.provider_type_id
-                WHERE s.version_id=v.id AND p.name=%s AND s.jurisdiction=%s) ORDER BY v.id""",
-                    (as_of, as_of, provider_type, jurisdiction),
-                )
-            ).fetchall()
-            versions = [await version_read(conn, v["id"]) for v in ids]
-            return CorpusSnapshot(
-                revision=revision,
-                active_space=space,
-                versions=versions,
-                chunks=[c for v in versions for c in v.chunks],
-            )
+            ids = await eligible_version_ids(conn, provider_type, jurisdiction, as_of)
+            return await snapshot_of(conn, revision, space, ids)
 
     async def requirement_topics(self, provider_id: int) -> dict[int, list[str]]:
         async with connection(self.pool) as conn:

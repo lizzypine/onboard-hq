@@ -9,9 +9,13 @@ from pydantic_ai.models import override_allow_model_requests
 from pydantic_ai.models.test import TestModel
 
 from app.agent import build_agent
+from app.embeddings import get_embedding_client
 from app.main import create_app, get_agent_factory
 from app.monitoring import get_monitoring_date
+from app.qa_agent import build_qa_agent, get_qa_agent_factory
+from app.qa_routes import get_qa_clock
 from tests.database import require_disposable_database
+from tests.knowledge_fixtures import SyntheticEmbeddings
 
 
 def output_for(scenario):
@@ -60,6 +64,13 @@ def create_test_app(
     output = output_for(scenario)
     application.dependency_overrides[get_agent_factory] = lambda: (
         lambda: build_agent(TestModel(custom_output_args=output))
+    )
+    application.dependency_overrides[get_embedding_client] = SyntheticEmbeddings
+    application.dependency_overrides[get_qa_clock] = lambda: lambda: as_of
+    application.dependency_overrides[get_qa_agent_factory] = lambda: (
+        lambda: build_qa_agent(
+            TestModel(custom_output_args={"outcome": "cannot_answer"})
+        )
     )
     return application
 

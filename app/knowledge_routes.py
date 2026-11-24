@@ -20,7 +20,6 @@ from app.knowledge_models import (
 )
 from app.models import DemoRole
 from app.repository.knowledge import KnowledgeRepository
-from app.rules.knowledge import require_manager
 
 router = APIRouter(prefix="/knowledge")
 Role = Annotated[DemoRole, Header(alias="X-Demo-Role")]
@@ -35,33 +34,19 @@ Repo = Annotated[KnowledgeRepository, Depends(repository)]
 
 @router.get("/documents")
 async def documents(repo: Repo, role: Role = "proposer") -> list[KnowledgeDocument]:
-    docs = await repo.list_documents()
-    if role == "manager":
-        return docs
-    return [
-        d.model_copy(
-            update={"versions": [v for v in d.versions if v.status != "draft"]}
-        )
-        for d in docs
-        if any(v.status != "draft" for v in d.versions)
-    ]
+    return await knowledge.list_documents(repo, role)
 
 
 @router.get("/versions/{version_id}")
 async def version(
     version_id: int, repo: Repo, role: Role = "proposer"
 ) -> KnowledgeVersion:
-    value = await repo.get_version(version_id)
-    if value.status == "draft":
-        require_manager(role)
-    return value
+    return await knowledge.read_version(repo, version_id, role)
 
 
 @router.get("/versions/{version_id}/original")
 async def original(version_id: int, repo: Repo, role: Role = "proposer") -> Response:
-    status, media, raw = await repo.original(version_id)
-    if status == "draft":
-        require_manager(role)
+    media, raw = await knowledge.read_original(repo, version_id, role)
     extension = {"text/plain": "txt", "text/html": "html", "application/pdf": "pdf"}[
         media
     ]
@@ -112,5 +97,4 @@ async def withdraw(
 async def operation(
     operation_id: UUID, repo: Repo, role: Role = "proposer"
 ) -> OperationReceipt:
-    require_manager(role)
-    return await repo.operation(operation_id)
+    return await knowledge.read_operation(repo, operation_id, role)

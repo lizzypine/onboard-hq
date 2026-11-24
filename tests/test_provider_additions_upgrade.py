@@ -129,7 +129,7 @@ def test_additions_upgrade_preserves_version_four_evidence_and_seed(tmp_path):
         with psycopg.connect(url) as conn:
             assert conn.execute(
                 "SELECT count(*) FROM schema_migrations"
-            ).fetchone() == (6,)
+            ).fetchone() == (7,)
             assert conn.execute(
                 "SELECT count(*) FROM requirements WHERE checklist_template_id IS NULL OR initial_status IS NOT NULL OR initial_scheduled_date IS NOT NULL OR initial_deadline IS NOT NULL"
             ).fetchone() == (0,)

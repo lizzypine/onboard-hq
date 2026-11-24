@@ -39,6 +39,7 @@ from app.page import PAGE
 from app.provider_lifecycle import change_archive_state
 from app.provider_models import CreateProviderRequest, ProviderTypeTemplate
 from app.providers import add_provider
+from app.qa_routes import router as qa_router
 from app.repository import RecordNotFound
 from app.repository.checklist import ChecklistRepository
 from app.repository.provider_lifecycle import ProviderLifecycleRepository
@@ -62,6 +63,7 @@ from app.rules.providers import (
     ProviderCreationInvalid,
     ProviderTemplateConflict,
 )
+from app.rules.qa import QuestionConflict, QuestionScopeError
 from app.rules.review import ReviewConflict, ReviewForbidden, ReviewValidationError
 from app.source_extraction import SourceError
 
@@ -280,6 +282,9 @@ def create_app() -> FastAPI:
     application = FastAPI(title="Onboard HQ", lifespan=lifespan)
     application.include_router(router)
     application.include_router(knowledge_router)
+    application.include_router(qa_router)
+    application.add_exception_handler(QuestionConflict, review_conflict)
+    application.add_exception_handler(QuestionScopeError, review_invalid)
     application.add_exception_handler(KnowledgeForbidden, review_forbidden)
     application.add_exception_handler(KnowledgeConflict, review_conflict)
     application.add_exception_handler(KnowledgeInvalid, review_invalid)

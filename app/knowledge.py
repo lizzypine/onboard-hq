@@ -1,9 +1,14 @@
-"""Authorize source changes and release connections before extraction and embedding."""
+"""Authorize access to guidance and coordinate reviewed source changes."""
+
+from uuid import UUID
 
 from app.embeddings import EmbeddingClient, validate_vectors
 from app.knowledge_models import (
     DraftRequest,
     EditDraftRequest,
+    KnowledgeDocument,
+    KnowledgeVersion,
+    Media,
     OperationReceipt,
     PublishRequest,
     WithdrawRequest,
@@ -15,8 +20,39 @@ from app.rules.knowledge import (
     require_publishable,
     require_revision,
     require_space,
+    require_visible_version,
+    visible_documents,
 )
 from app.source_extraction import extract_source
+
+
+async def list_documents(
+    repo: KnowledgeRepository, role: str
+) -> list[KnowledgeDocument]:
+    return visible_documents(await repo.list_documents(), role)
+
+
+async def read_version(
+    repo: KnowledgeRepository, vid: int, role: str
+) -> KnowledgeVersion:
+    version = await repo.get_version(vid)
+    require_visible_version(role, version.status)
+    return version
+
+
+async def read_original(
+    repo: KnowledgeRepository, vid: int, role: str
+) -> tuple[Media, bytes]:
+    status, media, raw = await repo.original(vid)
+    require_visible_version(role, status)
+    return media, raw
+
+
+async def read_operation(
+    repo: KnowledgeRepository, operation_id: UUID, role: str
+) -> OperationReceipt:
+    require_manager(role)
+    return await repo.operation(operation_id)
 
 
 async def create_draft(

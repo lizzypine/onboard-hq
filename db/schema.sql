@@ -204,6 +204,75 @@ END;
 $$;
 
 
+--
+-- Name: qa_check_quote(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.qa_check_quote() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF (SELECT substring(text FROM NEW.quote_start+1 FOR NEW.quote_end-NEW.quote_start)
+        FROM knowledge_chunks WHERE id=NEW.chunk_id) IS DISTINCT FROM NEW.quote THEN
+        RAISE EXCEPTION 'Citation quote must match its retained passage span';
+    END IF;
+    RETURN NEW;
+END $$;
+
+
+--
+-- Name: qa_evidence_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.qa_evidence_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF TG_OP='DELETE' AND NOT EXISTS (SELECT FROM qa_runs WHERE id=OLD.run_id) THEN
+        RETURN OLD;
+    END IF;
+    IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'Retained question evidence is immutable'; END IF;
+    IF (SELECT state FROM qa_runs WHERE id=NEW.run_id FOR UPDATE) <> 'processing' THEN
+        RAISE EXCEPTION 'A terminal answer cannot acquire more evidence';
+    END IF;
+    RETURN NEW;
+END $$;
+
+
+--
+-- Name: qa_run_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.qa_run_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF TG_OP='INSERT' AND NEW.state='processing' THEN RETURN NEW; END IF;
+    IF TG_OP='DELETE' AND NOT EXISTS (SELECT FROM providers WHERE id=OLD.provider_id) THEN
+        RETURN OLD;
+    END IF;
+    IF TG_OP<>'UPDATE' OR OLD.state<>'processing' THEN
+        RAISE EXCEPTION 'A retained answer can only leave processing once';
+    END IF;
+    IF NEW.state='processing' OR
+        (to_jsonb(NEW) - ARRAY['state','outcome','completed_at','generation_model','explanation','missing_facts','conflict_explanation','failure_message','became_outdated'])
+        IS DISTINCT FROM
+        (to_jsonb(OLD) - ARRAY['state','outcome','completed_at','generation_model','explanation','missing_facts','conflict_explanation','failure_message','became_outdated']) THEN
+        RAISE EXCEPTION 'Captured question identity is immutable';
+    END IF;
+    IF (NEW.outcome='supported' AND NOT EXISTS (SELECT FROM qa_claims WHERE run_id=NEW.id))
+        OR (NEW.outcome IN ('cannot_answer','service_unavailable') AND EXISTS (SELECT FROM qa_claims WHERE run_id=NEW.id))
+        OR EXISTS (
+            SELECT FROM qa_claims c WHERE c.run_id=NEW.id AND NOT EXISTS (
+                SELECT FROM qa_citations e WHERE e.run_id=c.run_id AND e.claim_position=c.position
+            )
+        ) THEN
+        RAISE EXCEPTION 'Terminal claims require validated citation evidence';
+    END IF;
+    RETURN NEW;
+END $$;
+
+
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
@@ -649,6 +718,170 @@ ALTER TABLE public.providers ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
 
 
 --
+-- Name: qa_citations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qa_citations (
+    run_id integer NOT NULL,
+    claim_position integer NOT NULL,
+    "position" integer NOT NULL,
+    chunk_id integer NOT NULL,
+    context_order integer NOT NULL,
+    quote text NOT NULL,
+    quote_start integer NOT NULL,
+    quote_end integer NOT NULL,
+    CONSTRAINT qa_citations_check CHECK (((quote_end - quote_start) = char_length(quote))),
+    CONSTRAINT qa_citations_position_check CHECK ((("position" >= 1) AND ("position" <= 8))),
+    CONSTRAINT qa_citations_quote_check CHECK ((btrim(quote) <> ''::text)),
+    CONSTRAINT qa_citations_quote_start_check CHECK ((quote_start >= 0))
+);
+
+
+--
+-- Name: TABLE qa_citations; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.qa_citations IS 'A claim’s exact end-exclusive, passage-relative quote from supplied generation context.';
+
+
+--
+-- Name: qa_claims; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qa_claims (
+    run_id integer NOT NULL,
+    "position" integer NOT NULL,
+    text text NOT NULL,
+    CONSTRAINT qa_claims_position_check CHECK ((("position" >= 1) AND ("position" <= 12))),
+    CONSTRAINT qa_claims_text_check CHECK ((btrim(text) <> ''::text))
+);
+
+
+--
+-- Name: TABLE qa_claims; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.qa_claims IS 'An ordered answer claim with separately retained supporting citations.';
+
+
+--
+-- Name: qa_corpus_versions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qa_corpus_versions (
+    run_id integer NOT NULL,
+    version_id integer NOT NULL
+);
+
+
+--
+-- Name: TABLE qa_corpus_versions; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.qa_corpus_versions IS 'Eligible approved source version membership captured before outbound work.';
+
+
+--
+-- Name: qa_retrieved_chunks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qa_retrieved_chunks (
+    run_id integer NOT NULL,
+    chunk_id integer NOT NULL,
+    version_id integer NOT NULL,
+    keyword_rank integer,
+    vector_rank integer,
+    fused_rank integer,
+    context_order integer,
+    CONSTRAINT qa_retrieved_chunks_check CHECK (((fused_rank IS NOT NULL) = ((keyword_rank IS NOT NULL) OR (vector_rank IS NOT NULL)))),
+    CONSTRAINT qa_retrieved_chunks_check1 CHECK (((fused_rank IS NOT NULL) OR (context_order IS NOT NULL))),
+    CONSTRAINT qa_retrieved_chunks_context_order_check CHECK (((context_order >= 1) AND (context_order <= 12))),
+    CONSTRAINT qa_retrieved_chunks_fused_rank_check CHECK (((fused_rank >= 1) AND (fused_rank <= 40))),
+    CONSTRAINT qa_retrieved_chunks_keyword_rank_check CHECK (((keyword_rank >= 1) AND (keyword_rank <= 20))),
+    CONSTRAINT qa_retrieved_chunks_vector_rank_check CHECK (((vector_rank >= 1) AND (vector_rank <= 20)))
+);
+
+
+--
+-- Name: TABLE qa_retrieved_chunks; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.qa_retrieved_chunks IS 'One fused candidate or adjacent context passage, with path ranks and optional generation context order.';
+
+
+--
+-- Name: qa_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.qa_runs (
+    id integer NOT NULL,
+    request_id uuid NOT NULL,
+    provider_id integer NOT NULL,
+    provider_type_id integer NOT NULL,
+    provider_name text NOT NULL,
+    provider_type text NOT NULL,
+    requirement_id integer,
+    requirement_name text,
+    topic_hint text,
+    jurisdiction text NOT NULL,
+    question text NOT NULL,
+    as_of date NOT NULL,
+    corpus_revision bigint NOT NULL,
+    embedding_space_id integer NOT NULL,
+    generation_model text,
+    state text DEFAULT 'processing'::text NOT NULL,
+    outcome text,
+    explanation text,
+    missing_facts text,
+    conflict_explanation text,
+    failure_message text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    became_outdated boolean DEFAULT false NOT NULL,
+    CONSTRAINT qa_runs_check CHECK (((requirement_id IS NULL) = (requirement_name IS NULL))),
+    CONSTRAINT qa_runs_check1 CHECK (((topic_hint IS NULL) OR (requirement_id IS NOT NULL))),
+    CONSTRAINT qa_runs_check2 CHECK ((((state = 'processing'::text) AND (completed_at IS NULL) AND (outcome IS NULL) AND (NOT became_outdated)) OR ((state = 'completed'::text) AND (completed_at IS NOT NULL) AND (outcome IS NOT NULL) AND (outcome <> 'service_unavailable'::text)) OR ((state = 'failed'::text) AND (completed_at IS NOT NULL) AND (NOT (outcome IS DISTINCT FROM 'service_unavailable'::text))))),
+    CONSTRAINT qa_runs_check3 CHECK (((state = 'failed'::text) = (failure_message IS NOT NULL))),
+    CONSTRAINT qa_runs_check4 CHECK (((NOT (outcome IS DISTINCT FROM 'more_information_needed'::text)) = (missing_facts IS NOT NULL))),
+    CONSTRAINT qa_runs_check5 CHECK (((NOT (outcome IS DISTINCT FROM 'conflicting_guidance'::text)) = (conflict_explanation IS NOT NULL))),
+    CONSTRAINT qa_runs_check6 CHECK (((explanation IS NULL) OR ((state = 'completed'::text) AND (outcome = 'cannot_answer'::text)))),
+    CONSTRAINT qa_runs_conflict_explanation_check CHECK ((btrim(conflict_explanation) <> ''::text)),
+    CONSTRAINT qa_runs_corpus_revision_check CHECK ((corpus_revision >= 0)),
+    CONSTRAINT qa_runs_explanation_check CHECK ((btrim(explanation) <> ''::text)),
+    CONSTRAINT qa_runs_failure_message_check CHECK ((btrim(failure_message) <> ''::text)),
+    CONSTRAINT qa_runs_generation_model_check CHECK ((btrim(generation_model) <> ''::text)),
+    CONSTRAINT qa_runs_jurisdiction_check CHECK ((btrim(jurisdiction) <> ''::text)),
+    CONSTRAINT qa_runs_missing_facts_check CHECK ((btrim(missing_facts) <> ''::text)),
+    CONSTRAINT qa_runs_outcome_check CHECK ((outcome = ANY (ARRAY['supported'::text, 'more_information_needed'::text, 'conflicting_guidance'::text, 'cannot_answer'::text, 'service_unavailable'::text]))),
+    CONSTRAINT qa_runs_provider_name_check CHECK ((btrim(provider_name) <> ''::text)),
+    CONSTRAINT qa_runs_provider_type_check CHECK ((btrim(provider_type) <> ''::text)),
+    CONSTRAINT qa_runs_question_check CHECK (((btrim(question) <> ''::text) AND (char_length(question) <= 2000))),
+    CONSTRAINT qa_runs_state_check CHECK ((state = ANY (ARRAY['processing'::text, 'completed'::text, 'failed'::text])))
+);
+
+
+--
+-- Name: TABLE qa_runs; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.qa_runs IS 'Captured read-only licensing questions with UUID receipts and immutable terminal outcomes.';
+
+
+--
+-- Name: qa_runs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.qa_runs ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.qa_runs_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: requirement_definitions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1011,6 +1244,14 @@ ALTER TABLE ONLY public.embedding_spaces
 
 
 --
+-- Name: knowledge_chunks knowledge_chunks_id_version_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.knowledge_chunks
+    ADD CONSTRAINT knowledge_chunks_id_version_id_key UNIQUE (id, version_id);
+
+
+--
 -- Name: knowledge_chunks knowledge_chunks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1128,6 +1369,102 @@ ALTER TABLE ONLY public.providers
 
 ALTER TABLE ONLY public.providers
     ADD CONSTRAINT providers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qa_citations qa_citations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_citations
+    ADD CONSTRAINT qa_citations_pkey PRIMARY KEY (run_id, claim_position, "position");
+
+
+--
+-- Name: qa_citations qa_citations_run_id_claim_position_chunk_id_quote_start_quo_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_citations
+    ADD CONSTRAINT qa_citations_run_id_claim_position_chunk_id_quote_start_quo_key UNIQUE (run_id, claim_position, chunk_id, quote_start, quote_end);
+
+
+--
+-- Name: qa_claims qa_claims_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_claims
+    ADD CONSTRAINT qa_claims_pkey PRIMARY KEY (run_id, "position");
+
+
+--
+-- Name: qa_corpus_versions qa_corpus_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_corpus_versions
+    ADD CONSTRAINT qa_corpus_versions_pkey PRIMARY KEY (run_id, version_id);
+
+
+--
+-- Name: qa_retrieved_chunks qa_retrieved_chunks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_retrieved_chunks
+    ADD CONSTRAINT qa_retrieved_chunks_pkey PRIMARY KEY (run_id, chunk_id);
+
+
+--
+-- Name: qa_retrieved_chunks qa_retrieved_chunks_run_id_chunk_id_context_order_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_retrieved_chunks
+    ADD CONSTRAINT qa_retrieved_chunks_run_id_chunk_id_context_order_key UNIQUE (run_id, chunk_id, context_order);
+
+
+--
+-- Name: qa_retrieved_chunks qa_retrieved_chunks_run_id_context_order_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_retrieved_chunks
+    ADD CONSTRAINT qa_retrieved_chunks_run_id_context_order_key UNIQUE (run_id, context_order);
+
+
+--
+-- Name: qa_retrieved_chunks qa_retrieved_chunks_run_id_fused_rank_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_retrieved_chunks
+    ADD CONSTRAINT qa_retrieved_chunks_run_id_fused_rank_key UNIQUE (run_id, fused_rank);
+
+
+--
+-- Name: qa_retrieved_chunks qa_retrieved_chunks_run_id_keyword_rank_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_retrieved_chunks
+    ADD CONSTRAINT qa_retrieved_chunks_run_id_keyword_rank_key UNIQUE (run_id, keyword_rank);
+
+
+--
+-- Name: qa_retrieved_chunks qa_retrieved_chunks_run_id_vector_rank_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_retrieved_chunks
+    ADD CONSTRAINT qa_retrieved_chunks_run_id_vector_rank_key UNIQUE (run_id, vector_rank);
+
+
+--
+-- Name: qa_runs qa_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_runs
+    ADD CONSTRAINT qa_runs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: qa_runs qa_runs_request_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_runs
+    ADD CONSTRAINT qa_runs_request_id_key UNIQUE (request_id);
 
 
 --
@@ -1342,6 +1679,76 @@ CREATE INDEX providers_template ON public.providers USING btree (checklist_templ
 
 
 --
+-- Name: qa_citations_chunk; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qa_citations_chunk ON public.qa_citations USING btree (chunk_id, run_id, context_order);
+
+
+--
+-- Name: qa_citations_claim; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qa_citations_claim ON public.qa_citations USING btree (claim_position);
+
+
+--
+-- Name: qa_citations_context_order; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qa_citations_context_order ON public.qa_citations USING btree (context_order);
+
+
+--
+-- Name: qa_corpus_versions_version; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qa_corpus_versions_version ON public.qa_corpus_versions USING btree (version_id);
+
+
+--
+-- Name: qa_retrieved_chunk; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qa_retrieved_chunk ON public.qa_retrieved_chunks USING btree (chunk_id, version_id);
+
+
+--
+-- Name: qa_retrieved_version; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qa_retrieved_version ON public.qa_retrieved_chunks USING btree (version_id, run_id);
+
+
+--
+-- Name: qa_runs_provider_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qa_runs_provider_created ON public.qa_runs USING btree (provider_id, created_at DESC, id DESC);
+
+
+--
+-- Name: qa_runs_provider_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qa_runs_provider_type ON public.qa_runs USING btree (provider_type_id);
+
+
+--
+-- Name: qa_runs_requirement; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qa_runs_requirement ON public.qa_runs USING btree (requirement_id, provider_id);
+
+
+--
+-- Name: qa_runs_space; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX qa_runs_space ON public.qa_runs USING btree (embedding_space_id);
+
+
+--
 -- Name: requirement_definitions_normalized_name; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1531,6 +1938,48 @@ CREATE TRIGGER preserve_type_label BEFORE UPDATE ON public.provider_types FOR EA
 
 
 --
+-- Name: qa_citations qa_check_quote; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER qa_check_quote BEFORE INSERT ON public.qa_citations FOR EACH ROW EXECUTE FUNCTION public.qa_check_quote();
+
+
+--
+-- Name: qa_citations qa_citation_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER qa_citation_guard BEFORE INSERT OR DELETE OR UPDATE ON public.qa_citations FOR EACH ROW EXECUTE FUNCTION public.qa_evidence_guard();
+
+
+--
+-- Name: qa_claims qa_claim_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER qa_claim_guard BEFORE INSERT OR DELETE OR UPDATE ON public.qa_claims FOR EACH ROW EXECUTE FUNCTION public.qa_evidence_guard();
+
+
+--
+-- Name: qa_corpus_versions qa_corpus_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER qa_corpus_guard BEFORE INSERT OR DELETE OR UPDATE ON public.qa_corpus_versions FOR EACH ROW EXECUTE FUNCTION public.qa_evidence_guard();
+
+
+--
+-- Name: qa_retrieved_chunks qa_retrieval_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER qa_retrieval_guard BEFORE INSERT OR DELETE OR UPDATE ON public.qa_retrieved_chunks FOR EACH ROW EXECUTE FUNCTION public.qa_evidence_guard();
+
+
+--
+-- Name: qa_runs qa_run_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER qa_run_guard BEFORE INSERT OR DELETE OR UPDATE ON public.qa_runs FOR EACH ROW EXECUTE FUNCTION public.qa_run_guard();
+
+
+--
 -- Name: checklist_edits checklist_edits_requirement_id_provider_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1632,6 +2081,94 @@ ALTER TABLE ONLY public.knowledge_versions
 
 ALTER TABLE ONLY public.providers
     ADD CONSTRAINT providers_checklist_template_id_fkey FOREIGN KEY (checklist_template_id) REFERENCES public.checklist_templates(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: qa_citations qa_citations_run_id_chunk_id_context_order_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_citations
+    ADD CONSTRAINT qa_citations_run_id_chunk_id_context_order_fkey FOREIGN KEY (run_id, chunk_id, context_order) REFERENCES public.qa_retrieved_chunks(run_id, chunk_id, context_order) ON DELETE CASCADE;
+
+
+--
+-- Name: qa_citations qa_citations_run_id_claim_position_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_citations
+    ADD CONSTRAINT qa_citations_run_id_claim_position_fkey FOREIGN KEY (run_id, claim_position) REFERENCES public.qa_claims(run_id, "position") ON DELETE CASCADE;
+
+
+--
+-- Name: qa_claims qa_claims_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_claims
+    ADD CONSTRAINT qa_claims_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.qa_runs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: qa_corpus_versions qa_corpus_versions_run_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_corpus_versions
+    ADD CONSTRAINT qa_corpus_versions_run_id_fkey FOREIGN KEY (run_id) REFERENCES public.qa_runs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: qa_corpus_versions qa_corpus_versions_version_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_corpus_versions
+    ADD CONSTRAINT qa_corpus_versions_version_id_fkey FOREIGN KEY (version_id) REFERENCES public.knowledge_versions(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: qa_retrieved_chunks qa_retrieved_chunks_chunk_id_version_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_retrieved_chunks
+    ADD CONSTRAINT qa_retrieved_chunks_chunk_id_version_id_fkey FOREIGN KEY (chunk_id, version_id) REFERENCES public.knowledge_chunks(id, version_id) ON DELETE RESTRICT;
+
+
+--
+-- Name: qa_retrieved_chunks qa_retrieved_chunks_run_id_version_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_retrieved_chunks
+    ADD CONSTRAINT qa_retrieved_chunks_run_id_version_id_fkey FOREIGN KEY (run_id, version_id) REFERENCES public.qa_corpus_versions(run_id, version_id) ON DELETE CASCADE;
+
+
+--
+-- Name: qa_runs qa_runs_embedding_space_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_runs
+    ADD CONSTRAINT qa_runs_embedding_space_id_fkey FOREIGN KEY (embedding_space_id) REFERENCES public.embedding_spaces(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: qa_runs qa_runs_provider_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_runs
+    ADD CONSTRAINT qa_runs_provider_id_fkey FOREIGN KEY (provider_id) REFERENCES public.providers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: qa_runs qa_runs_provider_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_runs
+    ADD CONSTRAINT qa_runs_provider_type_id_fkey FOREIGN KEY (provider_type_id) REFERENCES public.provider_types(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: qa_runs qa_runs_requirement_id_provider_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.qa_runs
+    ADD CONSTRAINT qa_runs_requirement_id_provider_id_fkey FOREIGN KEY (requirement_id, provider_id) REFERENCES public.requirements(id, provider_id) ON DELETE CASCADE;
 
 
 --
@@ -1771,4 +2308,5 @@ INSERT INTO public.schema_migrations (version) VALUES
     ('20261114000100'),
     ('20261115000100'),
     ('20261122000100'),
-    ('20261122000200');
+    ('20261122000200'),
+    ('20261122000300');

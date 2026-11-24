@@ -12,9 +12,10 @@ This design governs the approved implementation. RAG and licensing substeps are
 separate implementation slices; database migrations require their own application
 deployment step. The application remains a synthetic-data prototype. The
 canonical `docs/proposal.md` stays unchanged. The proposed database extension is
-recorded under **Licensing substeps and knowledge — proposed extension** in
-[database-design.md](../../database-design.md); the implemented twelve-table model
-in `db/schema.sql` does not contain it.
+recorded under **Licensing substeps and knowledge** in
+[database-design.md](../../database-design.md). The implemented schema includes
+the source and citation relations. Assigned licensing substeps remain a separate
+proposal.
 
 ## Approaches
 

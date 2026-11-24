@@ -16,6 +16,7 @@ from app.agent import AnalyzeUpdateRequest, ProviderContext, Requirement, build_
 from app.database import create_pool
 from app.embeddings import get_embedding_client
 from app.models import StoredProvider
+from app.qa_agent import build_qa_agent, get_qa_agent_factory
 from app.seed import seed_synthetic
 from tests.database import ROOT, configured_test_url, migrate_test_database
 from tests.knowledge_fixtures import SyntheticEmbeddings
@@ -38,7 +39,7 @@ def db_url() -> str:
     migrate_test_database(url)
     with psycopg.connect(url) as conn:
         conn.execute(
-            "TRUNCATE requirement_knowledge_links,knowledge_publications,knowledge_review_issues,knowledge_scopes,knowledge_embeddings,knowledge_chunks,knowledge_versions,checklist_edits,review_decisions,suggestions,update_ambiguities,update_requirement_snapshots,updates,requirements,providers,template_requirements,checklist_templates,requirement_definitions,provider_types"
+            "TRUNCATE qa_citations,qa_claims,qa_retrieved_chunks,qa_corpus_versions,qa_runs,requirement_knowledge_links,knowledge_publications,knowledge_review_issues,knowledge_scopes,knowledge_embeddings,knowledge_chunks,knowledge_versions,checklist_edits,review_decisions,suggestions,update_ambiguities,update_requirement_snapshots,updates,requirements,providers,template_requirements,checklist_templates,requirement_definitions,provider_types"
         )
         conn.execute(
             "UPDATE knowledge_state SET revision=0,active_space_id=(SELECT id FROM embedding_spaces WHERE model='text-embedding-3-small' AND version='1' AND dimensions=1536)"
@@ -109,6 +110,11 @@ def client(
     main.app.dependency_overrides[get_embedding_client] = SyntheticEmbeddings
     main.app.dependency_overrides[main.get_agent_factory] = lambda: (
         lambda: build_agent(extraction_model)
+    )
+    main.app.dependency_overrides[get_qa_agent_factory] = lambda: (
+        lambda: build_qa_agent(
+            TestModel(custom_output_args={"outcome": "cannot_answer"})
+        )
     )
     try:
         with TestClient(main.app) as test_client:
