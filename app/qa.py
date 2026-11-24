@@ -17,8 +17,8 @@ from app.generation import AgentConfigurationError
 from app.knowledge_models import CorpusSnapshot
 from app.qa_agent import QAAgentFactory
 from app.qa_models import AnswerDraft, AskRequest, RankedPassage, SavedAnswer
-from app.repository.qa import JURISDICTION, ClaimedQuestion, QARepository
-from app.rules.knowledge import KnowledgeConflict, require_space
+from app.repository.qa import ClaimedQuestion, QARepository
+from app.rules.knowledge import JURISDICTION, KnowledgeConflict, require_space
 from app.rules.qa import InvalidAnswer, validate_answer
 
 QAClock = Callable[[], date]

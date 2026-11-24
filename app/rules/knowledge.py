@@ -10,6 +10,7 @@ DENTAL_TOPICS = frozenset({"dental", "renewal"})
 CONTROLLED_SUBSTANCE_TOPICS = frozenset({"ned", "dea", "pdmp"})
 SHARED_TOPICS = frozenset({"licensing", "internal", "statutory"})
 SUPPORTED_TOPICS = DENTAL_TOPICS | CONTROLLED_SUBSTANCE_TOPICS | SHARED_TOPICS
+JURISDICTION = "HI"
 
 
 class KnowledgeForbidden(ValueError):

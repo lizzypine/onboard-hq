@@ -207,6 +207,27 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvi
     };
   }
 
+  function renderRequirementDetails(row, requirement, actionHidden) {
+    const details = requirementDetails(requirement);
+    const next = row.nextElementSibling;
+    const anchor = next?.classList.contains("requirement-editor") ? next : row;
+    const adjacent = anchor.nextElementSibling;
+    const existing = adjacent?.classList.contains("requirement-suggestions") ? adjacent : null;
+    if (!details) {
+      existing?.remove();
+      return;
+    }
+    const detailsRow = existing || document.createElement("tr");
+    if (!existing) {
+      detailsRow.className = "requirement-suggestions";
+      detailsRow.dataset.requirementId = requirement.id;
+      anchor.after(detailsRow);
+    }
+    const cell = detailsRow.firstElementChild || text(detailsRow, "td", "");
+    cell.colSpan = actionHidden ? 5 : 6;
+    if (cell.firstElementChild !== details) cell.replaceChildren(details);
+  }
+
   function draw(preservedEditor = null) {
     const preservedSync = syncDraft;
     body.replaceChildren();
@@ -241,18 +262,11 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvi
           body.querySelector(".checklist-fields select").focus();
         });
       }
-      const details = requirementDetails(requirement);
-      if (details) {
-        const detailsRow = text(body, "tr", "", "requirement-suggestions");
-        detailsRow.dataset.requirementId = requirement.id;
-        const cell = text(detailsRow, "td", "");
-        cell.colSpan = action.hidden ? 5 : 6;
-        cell.append(details);
-      }
       if (editId === requirement.id) {
         if (preservedEditor) { row.after(preservedEditor); syncDraft = preservedSync; }
         else renderEditor(row, requirement, catalog.get(requirement.id)?.statuses || [requirement.status]);
       }
+      renderRequirementDetails(row, requirement, action.hidden);
     });
     syncControls();
   }
@@ -260,6 +274,12 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvi
   retry.addEventListener("click", sendAttempt);
   return {
     recoverLegacy,
+    refreshRequirementDetails() {
+      if (!provider) return;
+      const rows = body.querySelectorAll(".requirement-row");
+      const actionHidden = document.getElementById("checklist-action-heading").hidden;
+      provider.requirements.forEach((requirement, index) => renderRequirementDetails(rows[index], requirement, actionHidden));
+    },
     render(nextProvider, nextMonitoring, nextOptions) {
       const previous = provider?.requirements.find(r => r.id === editId);
       const next = nextProvider?.requirements.find(r => r.id === editId);

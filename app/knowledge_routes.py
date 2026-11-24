@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Response
+from fastapi import APIRouter, Depends, Header, Path, Response
 
 from app import knowledge
 from app.database import DatabasePool
@@ -16,6 +16,7 @@ from app.knowledge_models import (
     KnowledgeVersion,
     OperationReceipt,
     PublishRequest,
+    SourceReviewOptions,
     WithdrawRequest,
 )
 from app.models import DemoRole
@@ -35,6 +36,18 @@ Repo = Annotated[KnowledgeRepository, Depends(repository)]
 @router.get("/documents")
 async def documents(repo: Repo, role: Role = "proposer") -> list[KnowledgeDocument]:
     return await knowledge.list_documents(repo, role)
+
+
+@router.get("/review-options")
+def review_options(role: Role = "proposer") -> SourceReviewOptions:
+    return knowledge.source_review_options(role)
+
+
+@router.get("/providers/{provider_id}/requirement-topics")
+async def requirement_topics(
+    provider_id: Annotated[int, Path(gt=0)], repo: Repo
+) -> dict[int, list[str]]:
+    return await repo.requirement_topics(provider_id)
 
 
 @router.get("/versions/{version_id}")

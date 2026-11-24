@@ -21,6 +21,7 @@ from app.knowledge_models import (
     SourceIdentity,
 )
 from app.repository.knowledge import KnowledgeRepository
+from app.rules.knowledge import JURISDICTION
 from app.source_extraction import MAX_BYTES, SourceError, extract_source
 
 SOURCE_DIR = Path(__file__).resolve().parents[1] / "knowledge"
@@ -98,7 +99,7 @@ async def ingest(repo: KnowledgeRepository, source_key: str) -> OperationReceipt
         text=parsed.text,
         scopes=[
             KnowledgeScope(
-                provider_type="Dentist", jurisdiction="HI", topic=source.topic
+                provider_type="Dentist", jurisdiction=JURISDICTION, topic=source.topic
             )
         ],
         review_issues=INTERNAL_ISSUES if source.url is None else [],

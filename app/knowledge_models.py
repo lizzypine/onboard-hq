@@ -32,6 +32,11 @@ class KnowledgeScope(Contract):
     topic: Label
 
 
+class SourceReviewOptions(Contract):
+    topics: list[str]
+    default_scope: KnowledgeScope
+
+
 class Passage(Contract):
     text: str
     section: str

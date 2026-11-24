@@ -24,6 +24,7 @@ from app.repository.knowledge_reads import (
     state,
 )
 from app.retrieval import PATH_LIMIT, merge_paths
+from app.rules.knowledge import JURISDICTION
 from app.rules.qa import (
     QuestionConflict,
     QuestionScopeError,
@@ -31,7 +32,6 @@ from app.rules.qa import (
     question_topics,
 )
 
-JURISDICTION = "HI"
 FAILURE_MESSAGE = "Licensing guidance is temporarily unavailable."
 HISTORICAL_WARNING = (
     "This answer used earlier approved guidance. Ask again for current guidance."

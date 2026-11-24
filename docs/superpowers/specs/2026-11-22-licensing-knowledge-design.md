@@ -235,8 +235,8 @@ notices, reviewed as versions rather than treated as permanently current:
 
 1. The supplied HICHC internal checklist, separated into dental, NED/PDMP, DEA,
    and final handoff sections.
-2. [Dentist application instructions](https://cca.hawaii.gov/pvl/files/2024/09/Require-Instruct-App-for-Dentist_08.24R.pdf)
-   and [license verification form](https://cca.hawaii.gov/pvl/files/2018/09/Verification-of-Lic-DT-14a_09.18R.pdf).
+2. [Dentist application instructions](https://cca.hawaii.gov/wp-content/uploads/2026/01/Require-Instruct-App-for-Dentist_08.24R.pdf)
+   and [license verification form](https://cca.hawaii.gov/wp-content/uploads/2026/01/Verification-of-Lic-DT-14a_09.18R.pdf).
 3. [Board licensing laws/rules](https://cca.hawaii.gov/pvl/boards/dentist/statute_rules/),
    including applicable HRS chapters and HAR Chapter 79.
 4. [Board renewal/CE notices](https://cca.hawaii.gov/pvl/boards/dentist/), including

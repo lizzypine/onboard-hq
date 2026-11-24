@@ -110,7 +110,8 @@ PAGE = """<!doctype html>
       .monitoring-counts { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
-  <script src="/static/onboarding.js?v=7" type="module"></script>
+  <link rel="stylesheet" href="/static/knowledge.css?v=1">
+  <script src="/static/onboarding.js?v=8" type="module"></script>
 </head>
 <body>
 <main>
@@ -163,7 +164,14 @@ PAGE = """<!doctype html>
     <button type="button" id="discard-provider-recovery" hidden>Discard unreadable provider draft</button>
   </section>
   <section aria-labelledby="checklist-heading">
-    <h2 id="checklist-heading">2. Onboarding checklist</h2>
+    <div class="section-heading">
+      <h2 id="checklist-heading">2. Onboarding checklist</h2>
+      <button id="open-ask" class="primary ask-trigger" type="button" aria-haspopup="dialog" disabled>
+        <svg viewBox="0 0 28 28" width="21" height="21" aria-hidden="true" focusable="false">
+          <path fill="currentColor" d="M12 2l2.8 8.2L23 13l-8.2 2.8L12 24l-2.8-8.2L1 13l8.2-2.8zM23 1l1.1 3.9L28 6l-3.9 1.1L23 11l-1.1-3.9L18 6l3.9-1.1zM24 18l.8 2.2L27 21l-2.2.8L24 24l-.8-2.2L21 21l2.2-.8z"/>
+        </svg>Ask AI
+      </button>
+    </div>
     <p id="pending-suggestions" role="status" aria-live="polite">0 pending suggestions</p>
     <div id="monitoring-summary" role="region" aria-label="Monitoring summary" hidden>
       <dl class="monitoring-counts">
@@ -204,6 +212,64 @@ PAGE = """<!doctype html>
       <div id="review-results"></div>
     </details>
   </section>
+  <section id="knowledge-sources" aria-labelledby="sources-heading" hidden>
+    <h2 id="sources-heading">Manage licensing guidance</h2>
+    <p class="knowledge-muted">Review and publish sources for licensing questions.</p>
+    <p id="source-catalog-status" class="knowledge-status" role="status"></p>
+    <div id="source-catalog"></div>
+    <div class="knowledge-actions">
+      <button type="button" id="reload-sources" hidden>Reload sources</button>
+      <button type="button" id="check-source-operation" hidden>Check source operation</button>
+      <button type="button" id="dismiss-source-operation" hidden>Dismiss unconfirmed operation</button>
+    </div>
+  </section>
+  <dialog id="ask-dialog" class="knowledge-dialog" aria-labelledby="ask-heading">
+    <header class="knowledge-dialog-header">
+      <h2 id="ask-heading">Ask AI</h2>
+      <button type="button" class="knowledge-close" aria-label="Close Ask AI">×</button>
+      <p class="knowledge-muted">Answers from approved licensing documentation</p>
+    </header>
+    <div class="knowledge-dialog-body">
+      <p id="ask-scope" class="knowledge-context"></p>
+      <form id="ask-form">
+        <label for="ask-question">What would you like to know?</label>
+        <textarea id="ask-question" maxlength="2000" rows="3" required autofocus
+          placeholder="Ask about licensing requirements, forms, or renewal"></textarea>
+        <button id="ask-submit" class="primary" type="submit">Ask about the documentation</button>
+        <div class="knowledge-examples" role="group" aria-label="Suggested questions">
+          <button type="button">How long do I have to complete the dental license process?</button>
+          <button type="button">How much CE does an established dentist need?</button>
+          <button type="button">Which DEA forms are used?</button>
+        </div>
+      </form>
+      <p id="ask-status" class="knowledge-status" role="status"></p>
+      <div class="knowledge-actions">
+        <button type="button" id="check-answer" hidden>Check for answer</button>
+        <button type="button" id="dismiss-question" hidden>Start a new question</button>
+      </div>
+      <div id="ask-answer" class="knowledge-answer" aria-live="polite"></div>
+      <details id="ask-history" class="knowledge-history">
+        <summary>Question history</summary>
+        <div id="ask-history-items"></div>
+      </details>
+    </div>
+  </dialog>
+  <dialog id="source-dialog" class="knowledge-dialog" aria-labelledby="source-heading">
+    <header class="knowledge-dialog-header">
+      <h2 id="source-heading">Review licensing source</h2>
+      <button type="button" class="knowledge-close" aria-label="Close source review">×</button>
+      <p id="source-context" class="knowledge-muted"></p>
+    </header>
+    <div class="knowledge-dialog-body">
+      <p id="source-editor-status" class="knowledge-status" role="status"></p>
+      <div class="knowledge-actions">
+        <button type="button" id="reload-source-version" hidden>Reload saved version</button>
+        <button type="button" id="check-editor-operation" hidden>Check source operation</button>
+        <button type="button" id="dismiss-editor-operation" hidden>Dismiss unconfirmed operation</button>
+      </div>
+      <div id="source-editor"></div>
+    </div>
+  </dialog>
 </main>
 </body>
 </html>

@@ -7,14 +7,18 @@ from app.knowledge_models import (
     DraftRequest,
     EditDraftRequest,
     KnowledgeDocument,
+    KnowledgeScope,
     KnowledgeVersion,
     Media,
     OperationReceipt,
     PublishRequest,
+    SourceReviewOptions,
     WithdrawRequest,
 )
 from app.repository.knowledge import KnowledgeRepository
 from app.rules.knowledge import (
+    JURISDICTION,
+    SUPPORTED_TOPICS,
     fingerprint,
     require_manager,
     require_publishable,
@@ -24,6 +28,16 @@ from app.rules.knowledge import (
     visible_documents,
 )
 from app.source_extraction import extract_source
+
+
+def source_review_options(role: str) -> SourceReviewOptions:
+    require_manager(role)
+    return SourceReviewOptions(
+        topics=sorted(SUPPORTED_TOPICS),
+        default_scope=KnowledgeScope(
+            provider_type="Dentist", jurisdiction=JURISDICTION, topic="licensing"
+        ),
+    )
 
 
 async def list_documents(
