@@ -1,6 +1,7 @@
 "use strict";
 
 import {statusBadge, statusSelect} from "./statuses.js";
+import {orderChecklist} from "./checklist-order.js";
 import {addDateHelp} from "./date-help.js?v=4";
 import {inspectLegacyAttempt, legacyAttemptKey, recoverLegacyAttempt} from "./checklist-recovery.js?v=2";
 
@@ -236,7 +237,7 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvi
     if (!provider) { showNotice(); return; }
     const indicators = new Map(monitoring.requirements.map(row => [row.requirement_id, row]));
     const catalog = new Map(options.map(row => [row.requirement_id, row]));
-    provider.requirements.forEach((requirement, index) => {
+    orderChecklist(provider.requirements).forEach((requirement, index) => {
       const row = text(body, "tr", "", "requirement-row " + (index % 2 ? "stripe-even" : "stripe-odd"));
       row.dataset.requirementId = requirement.id;
       row.classList.toggle("editing", editId === requirement.id);
@@ -276,9 +277,9 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvi
     recoverLegacy,
     refreshRequirementDetails() {
       if (!provider) return;
-      const rows = body.querySelectorAll(".requirement-row");
+      const requirements = new Map(provider.requirements.map(requirement => [String(requirement.id), requirement]));
       const actionHidden = document.getElementById("checklist-action-heading").hidden;
-      provider.requirements.forEach((requirement, index) => renderRequirementDetails(rows[index], requirement, actionHidden));
+      body.querySelectorAll(".requirement-row").forEach(row => renderRequirementDetails(row, requirements.get(row.dataset.requirementId), actionHidden));
     },
     render(nextProvider, nextMonitoring, nextOptions) {
       const previous = provider?.requirements.find(r => r.id === editId);

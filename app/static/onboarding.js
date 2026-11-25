@@ -1,8 +1,8 @@
 "use strict";
 
 import {renderReviewControls} from "./review.js?v=4";
-import {providerLabel, setupProviderCreation} from "./providers.js?v=4";
-import {setupChecklist} from "./checklist.js?v=7";
+import {providerLabel, setupProviderCreation} from "./providers.js?v=5";
+import {setupChecklist} from "./checklist.js?v=8";
 import {setupDateHelp} from "./date-help.js?v=4";
 import {setupProviderLifecycle} from "./provider-lifecycle.js?v=2";
 import {setupAskAI} from "./ask-ai.js";

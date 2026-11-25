@@ -372,8 +372,15 @@ def test_phone_dialog_contained_scroll_and_safe_quote(page, app_server):
 
 
 def test_delayed_guide_bindings_preserve_editor_focus_and_pending_draft(
-    page, app_server
+    page, app_server, seeded_provider
 ):
+    with psycopg.connect(app_server.database_url) as connection:
+        for requirement in seeded_provider.requirements:
+            if requirement.name in ("Hawaii dental license", "State NED license"):
+                connection.execute(
+                    "UPDATE requirements SET deadline='2026-10-01' WHERE id=%s",
+                    (requirement.id,),
+                )
     held = []
     page.route("**/requirement-topics", lambda route: held.append(route))
     with page.expect_request("**/requirement-topics"):
@@ -400,6 +407,16 @@ def test_delayed_guide_bindings_preserve_editor_focus_and_pending_draft(
     expect(input_date).to_have_value("2026-11-20")
     expect(input_date).to_be_focused()
     expect(correction).to_have_value("Incomplete")
+    expect(row.locator("xpath=following-sibling::tr[2]")).to_contain_text(
+        "Drug screening completed."
+    )
+    for name in ("Hawaii dental license", "State NED license"):
+        requirement_row = page.locator(".requirement-row").filter(has_text=name)
+        action = requirement_row.locator("xpath=following-sibling::tr[1]")
+        action.get_by_role("button", name="Ask about this requirement").click()
+        dialog = page.get_by_role("dialog", name="Ask AI", exact=True)
+        expect(dialog.get_by_text(name, exact=False)).to_be_visible()
+        page.keyboard.press("Escape")
 
 
 def test_processing_question_after_reload_can_stay_in_history_during_a_new_ask(

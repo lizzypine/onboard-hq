@@ -2,6 +2,7 @@
 
 import {addDateHelp} from "./date-help.js?v=4";
 import {statusBadge} from "./statuses.js";
+import {orderChecklist} from "./checklist-order.js";
 
 const normalize = value => value.replace(/^ +| +$/g, "").toLowerCase();
 const labels = ["Name", "Provider type", "Proposed start date", "Requirements", "Review"];
@@ -118,7 +119,7 @@ export function createProviderWizard({dialog, onSubmit, onCancel}) {
     }
     const body = text(result, "tbody");
     const standards = includeStandard ? (selected()?.requirements || []).map(name => ({name, status: "Outstanding"})) : [];
-    for (const item of [...standards, ...draft.additions]) {
+    for (const item of orderChecklist([...standards, ...draft.additions])) {
       const additional = item.id !== undefined;
       const row = text(body, "tr");
       if (additional) { row.dataset.additionalId = item.id; row.tabIndex = -1; }
