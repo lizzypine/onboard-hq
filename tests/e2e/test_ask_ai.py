@@ -223,22 +223,31 @@ def test_close_reopen_reconciles_once_and_changed_input_gets_new_uuid(
         "request",
         lambda req: checked.append(req.url) if "/qa/requests/" in req.url else None,
     )
-    held = []
-
-    def delay_response(route):
-        held.append((route, route.fetch()))
-
-    page.route("**/qa/ask", delay_response)
-    send(dialog, RENEWAL_QUESTION)
+    # Let Playwright observe the committed response while Ask AI is still waiting.
+    deliver_response = page.evaluate_handle("""() => {
+        const fetch = window.fetch.bind(window);
+        let deliver;
+        const held = new Promise(resolve => { deliver = resolve; });
+        window.fetch = async (path, options) => {
+            if (path !== "/qa/ask") return fetch(path, options);
+            window.fetch = fetch;
+            const response = await fetch(path, options);
+            await held;
+            return response;
+        };
+        return deliver;
+    }""")
+    with page.expect_response("**/qa/ask") as completed:
+        send(dialog, RENEWAL_QUESTION)
+    assert completed.value.ok, completed.value.text()
+    assert completed.value.json()["state"] == "completed"
     expect(dialog.get_by_text("Asking…", exact=True)).to_be_visible()
     page.keyboard.press("Escape")
     page.get_by_role("button", name="Ask AI", exact=True).click()
     expect(dialog.get_by_text("Supported answer", exact=True)).to_be_visible()
     assert len(posted) == 1
     assert checked == [app_server.url + f"/qa/requests/{posted[0]['request_id']}"]
-    for route, response in held:
-        route.fulfill(response=response)
-    page.unroute("**/qa/ask", delay_response)
+    deliver_response.evaluate("deliver => deliver()")
     send(dialog, "How much CE do I personally have left?")
     expect(dialog.get_by_text("More information needed", exact=True)).to_be_visible()
     assert len(posted) == 2
