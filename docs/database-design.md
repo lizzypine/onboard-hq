@@ -582,6 +582,115 @@ Kekoa keeps version 1 and his progress after version 2 is configured. Malia star
 with version 2. Statuses live in their individual `requirements` rows, not in the
 shared template membership.
 
+## Licensing substeps and knowledge — proposed extension
+
+This section describes the target for the separate
+[Licensing Substeps and Ask AI design](superpowers/specs/2026-11-22-licensing-knowledge-design.md).
+It is proposed for review, not implemented by `db/schema.sql` and not authorization
+to implement or migrate. The existing twelve tables and their constraints remain
+the implemented model. Keep `docs/proposal.md` unchanged.
+
+Use the existing Neon PostgreSQL database with the `vector` extension for document
+embeddings and PostgreSQL full-text search for keywords. No separate vector service
+or graph database is proposed. Start with exact similarity over the eligible
+corpus and combine ranked results with reciprocal rank fusion. Approximate vector
+indexes and reranking require later measurements. Database/test environments need
+an explicitly supported pgvector version before implementation proceeds.
+
+### Source and retrieval target
+
+The following names describe relational responsibilities; the implementation plan
+will finalize column-level contracts and migrations without changing these rules.
+
+| Proposed relation | One row stores |
+| --- | --- |
+| `knowledge_documents` | A source identity, title, publisher/source kind, and configured source URL or internal-guide identity. |
+| `knowledge_versions` | An immutable published content version, original content, checksum, stated revision, retrieval/review/effective metadata, and source-document reference; drafts may change until publication. |
+| `knowledge_publications` | An immutable Manager publication/supersession/withdrawal action with UUID retry identity and exact version reference. |
+| `knowledge_scopes` | A version's allowed provider-type/jurisdiction/topic applicability; multiple scopes are separate related rows. |
+| `knowledge_chunks` | A version's passage text, order, enclosing section, and page/paragraph/line or character locators. |
+| `embedding_spaces` | A specific embedding model/version, dimensions, and activation identity. |
+| `knowledge_embeddings` | One chunk's numeric vector in one embedding space, unique by chunk and space. |
+| `requirement_knowledge_links` | A configured provider-type/requirement-definition binding to a knowledge topic; it does not alter checklist membership. |
+| `qa_runs` | A retryable question, captured selected-provider/type/requirement context, model/retrieval configuration, processing/outcome state, and validated terminal answer/failure metadata. |
+| `qa_corpus_versions` | One source version eligible in the corpus snapshot captured for a question. |
+| `qa_retrieved_chunks` | One retrieved candidate passage and its keyword/vector/fused ranks or scores for that question. |
+| `qa_claims` | One ordered final answer claim belonging to a QA run. |
+| `qa_citations` | One claim's supporting retrieved chunk, exact quoted text/span, and validated locator reference. |
+
+Use foreign keys for all parent/ownership relations and relational rows for scopes,
+candidates, claims, and citations. The numeric pgvector value and the derived
+`tsvector` search representation are explicit search-data exceptions to the
+no-array/list convention; neither stores a relationship collection. Their original
+source text remains available. Vector dimensions and embedding-space compatibility
+must be validated; different model spaces never share a similarity comparison.
+
+An approved version has complete extracted chunks and embeddings before publication.
+One atomic publication switches applicable active versions and increments a corpus
+revision token. Failed ingestion cannot expose partial content. Superseded and
+withdrawn versions/chunks remain for saved citation provenance, with new answers
+restricted to eligible approved versions. Effective dates are optional evidence,
+not inferred from URL timestamps. Unknown dates remain unknown.
+
+Retain the original official content inside the controlled source-version storage
+so saved citations do not depend on a remote PDF remaining at the same URL. The
+builder may choose bounded PostgreSQL binary/text storage for this small corpus;
+an external object store is not required. No document-upload route is introduced.
+Internal contact text is approved procedure evidence, not a provider's personal
+onboarding record. No real employee forms or filled applications enter the corpus.
+
+Each QA run captures its eligible version membership and corpus token, and retains
+candidates, claims, and citations with foreign keys to immutable evidence. Recheck
+corpus eligibility before publishing an in-flight answer. A changed corpus marks
+that result outdated and requires explicit re-asking, not automatic model replay.
+Saved historical answers remain labeled historical when sources change. A retry of
+the same request/context returns the same saved result; conflicting reuse fails.
+
+### Assigned substeps and reviewed progress target
+
+| Proposed relation | One row stores |
+| --- | --- |
+| `licensing_step_sets` | An immutable published set version bound to provider type and exact parent requirement definition, separate from parent checklist templates. |
+| `licensing_step_items` | One ordered definition/instruction in a set, immutable after publication. |
+| `licensing_step_sources` | One item-to-source-passage reference supporting that instruction. |
+| `requirement_step_assignments` | A Manager's explicit assignment of one published set to an existing provider requirement, with UUID retry identity; unique by parent requirement. |
+| `requirement_substeps` | A provider's saved status and version for one assigned item, unique by assignment/item. |
+| `substep_proposals` | Original administrative note, proposed status, and captured saved status/version for one provider-owned substep, with UUID retry identity. |
+| `substep_decisions` | One immutable terminal Manager decision for one proposal, preserving original input and actual before/after status/version; proposal reference is unique. |
+
+These are proposed additions, not extra rows in existing LLM suggestions, parent
+review decisions, or manual-edit history. Use integer identity resource keys and
+distinct UUID request/operation keys consistently with current API conventions.
+Use `timestamptz` for moments and `date` for stated effective dates. Required textual
+fields are nonblank. Fixed substep statuses are Outstanding, Pending, Incomplete,
+and Completed; no waiver or Not applicable status is introduced.
+
+Use composite ownership/membership foreign keys where needed to prevent cross-
+provider or wrong-set references, and validate type/definition applicability against
+the assigned parent. Declare each FK's deletion policy in the eventual migration.
+Shared versions/evidence referenced by progress or QA cannot be deleted; withdraw
+or supersede them. Provider-owned additions follow the existing provider-owned
+history retention/deletion boundary without introducing a deletion endpoint.
+
+Assignment locks the provider/parent, checks active lifecycle and published-set
+applicability, and atomically initializes all items Outstanding. It changes neither
+the parent's fields/version nor its fixed template membership. No automatic backfill,
+set replacement, removal, or checklist-template upgrade is authorized. The current
+synthetic checklist lacks a DEA parent; DEA documents remain searchable, and a DEA
+set requires an already assigned, explicitly configured DEA requirement.
+
+Proposal submission captures the authoritative substep state. Decision application
+serializes with lifecycle changes and competing substep reviews, checks Manager
+role and expected version, and atomically writes the terminal decision plus any
+real status/version change. Rejections preserve progress; stale approvals fail;
+stale proposals may still be rejected. Real changes increment only the substep
+version, leaving existing parent-status concurrency checks independent. Terminal
+retries return the original receipt, and conflicting payload reuse fails.
+
+Completion totals are derived from assigned saved substeps. They are separate from
+parent completion/monitoring and never mark a dental license Received. No stored
+rollup, automatic parent save, substep dates, or recurring task reset is proposed.
+
 ## Future work and boundaries
 
 Managed sign-in is deferred. A future authentication service will handle
@@ -593,8 +702,10 @@ simulated roles are not real access control.
 Do not add real employee data, provider-profile editing, provider version upgrades,
 post-creation requirement additions/removals or other checklist exceptions,
 archive-event history, document uploads,
-forwarded-email processing, automated reminders, policy retrieval/RAG, model
-routing, stored completion flags, or stored dashboard counts. Completion and
+forwarded-email processing, automated reminders, model routing, stored completion
+flags, or stored dashboard counts. Licensing substeps and policy retrieval/RAG
+remain unimplemented; the separate proposed extension above describes their
+bounded review target rather than changing the existing slice. Completion and
 Hawaii-date deadline monitoring stay derived from saved statuses and deadlines.
 
 The forward migration, data transformation, integer API contracts, captured-state
