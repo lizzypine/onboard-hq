@@ -4,7 +4,7 @@ import {addDateHelp} from "./date-help.js?v=4";
 import {statusBadge} from "./statuses.js";
 
 const normalize = value => value.replace(/^ +| +$/g, "").toLowerCase();
-const labels = ["Name", "Provider type", "Start date", "Requirements", "Review"];
+const labels = ["Name", "Provider type", "Proposed start date", "Requirements", "Review"];
 const displayDate = value => value ? new Intl.DateTimeFormat("en-US", {month: "short", day: "numeric", year: "numeric", timeZone: "UTC"}).format(new Date(value + "T12:00:00Z")) : "Not set";
 
 function text(parent, tag, value = "", className = "") {
