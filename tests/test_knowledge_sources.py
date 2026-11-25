@@ -208,3 +208,15 @@ def test_pdf_running_rule_number_does_not_reset_continuation():
     ]
     assert result.chunks[1].text == "§16-79-146\nExcept during the initial period."
     assert all(result.text[c.char_start : c.char_end] == c.text for c in result.chunks)
+
+
+@pytest.mark.parametrize("port", ["bad-port", "65536", "0", "", "4\n43"])
+def test_gateway_sanitizes_invalid_port_before_transport(monkeypatch, port):
+    from app.embeddings import EmbeddingUnavailable, GatewayEmbeddings
+    from tests.knowledge_fixtures import configure_invalid_embedding_port
+
+    configure_invalid_embedding_port(monkeypatch, port)
+    with pytest.raises(EmbeddingUnavailable) as exc:
+        asyncio.run(GatewayEmbeddings().embed(["synthetic"]))
+    assert "example.invalid" not in str(exc.value)
+    assert "synthetic-test-token" not in str(exc.value)

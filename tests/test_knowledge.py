@@ -442,3 +442,21 @@ def test_unsupported_topic_draft_remains_readable_and_publication_fails_before_e
     assert corrected.status_code == 200, corrected.text
     app.dependency_overrides[get_embedding_client] = SyntheticEmbeddings
     assert publish(client, version, revision=2).status_code == 200
+
+
+def test_invalid_gateway_port_keeps_source_draft(client, monkeypatch):
+    from app.embeddings import get_embedding_client
+    from app.main import app
+    from tests.knowledge_fixtures import configure_invalid_embedding_port
+
+    version = create(client, internal_id(client))
+    configure_invalid_embedding_port(monkeypatch, "bad-port")
+    del app.dependency_overrides[get_embedding_client]
+    result = publish(client, version)
+    assert result.status_code == 503
+    assert "example.invalid" not in result.text
+    assert "synthetic-test-token" not in result.text
+    assert (
+        client.get(f"/knowledge/versions/{version}", headers=MANAGER).json()["status"]
+        == "draft"
+    )

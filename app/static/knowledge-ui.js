@@ -1,9 +1,18 @@
 "use strict";
 
 export const byId = id => document.getElementById(id);
-export const dateOrUnknown = value => value ? value.slice(0, 10) : "Unknown";
 export const versionPath = id => "/knowledge/versions/" + id;
 export const versionLabel = (id, revision) => "Version " + id + (revision ? " · " + revision : "");
+
+const hawaiiDate = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Pacific/Honolulu", year: "numeric", month: "2-digit", day: "2-digit"
+});
+
+export function dateOrUnknown(value) {
+  if (!value) return "Unknown";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  return hawaiiDate.format(new Date(value));
+}
 
 export function element(parent, tag, value = "", className = "") {
   const node = document.createElement(tag);

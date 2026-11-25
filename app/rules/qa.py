@@ -11,8 +11,11 @@ from app.rules.knowledge import (
     SUPPORTED_TOPICS,
 )
 
-DENTAL_TERMS = frozenset({"adex", "ce", "periodontal"})
+DENTAL_TERMS = frozenset({"adex", "periodontal"})
 CONTROLLED_SUBSTANCE_TERMS = frozenset({"csr", "dea", "ned", "pdmp"})
+PRESCRIBING_TERMS = frozenset(
+    {"opioid", "opioids", "prescribing", "prescriber", "prescribers"}
+)
 
 
 def question_topics(question: str) -> list[str]:
@@ -21,7 +24,7 @@ def question_topics(question: str) -> list[str]:
     normalized = " ".join(words)
     dental = not DENTAL_TERMS.isdisjoint(words) or bool(
         re.search(
-            r"\b(?:continuing ed(?:ucation)?|dental (?:renewal|licen[cs](?:e|es|ing)))\b",
+            r"\bdental (?:ce|continuing ed(?:ucation)?|renewal|licen[cs](?:e|es|ing))\b",
             normalized,
         )
     )
@@ -35,7 +38,11 @@ def question_topics(question: str) -> list[str]:
             "prescription drug monitoring program",
         )
     )
-    if dental == controlled:
+    # Prescribing can overlap dental licensure without naming an agency.
+    prescribing = (
+        not PRESCRIBING_TERMS.isdisjoint(words) or "controlled medication" in normalized
+    )
+    if dental == controlled or (dental and prescribing):
         return sorted(SUPPORTED_TOPICS)
     selected = DENTAL_TOPICS if dental else CONTROLLED_SUBSTANCE_TOPICS
     return sorted(selected | SHARED_TOPICS)

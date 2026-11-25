@@ -188,7 +188,9 @@ a request UUID with changed input returns 409. Each answer records its outcome,
 claims and exact retained citations. Service failures have a distinct outcome.
 A source change or date change that affects applicability can mark a retained
 answer outdated. Ask a new question with a new UUID for current guidance.
-Open **Question history** in the modal for saved questions and their original
+If **Check for answer** finds a question still processing, select **Start a new
+question** to ask independently. The first question remains available in
+**Question history**, where you can check its status and open its original
 citations. Questions and answers are separate from onboarding progress and review
 history. Saved licensing substeps are future work.
 

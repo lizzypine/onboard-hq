@@ -65,6 +65,8 @@ class GatewayEmbeddings:
                 not token
                 or url.scheme != "https"
                 or not url.hostname
+                or url.port == 0
+                or url.netloc.endswith(":")
                 or url.username
                 or url.password
                 or url.query
@@ -96,7 +98,14 @@ class GatewayEmbeddings:
                     part = [item["embedding"] for item in data]
                     validate_vectors(part, len(batch), self.dimensions)
                     vectors.extend(part)
-        except (httpx.HTTPError, ValueError, TypeError, KeyError, OverflowError):
+        except (
+            httpx.HTTPError,
+            httpx.InvalidURL,
+            ValueError,
+            TypeError,
+            KeyError,
+            OverflowError,
+        ):
             raise EmbeddingUnavailable("Embedding service unavailable.") from None
         return vectors
 

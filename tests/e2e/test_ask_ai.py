@@ -391,3 +391,77 @@ def test_delayed_guide_bindings_preserve_editor_focus_and_pending_draft(
     expect(input_date).to_have_value("2026-11-20")
     expect(input_date).to_be_focused()
     expect(correction).to_have_value("Incomplete")
+
+
+def test_processing_question_after_reload_can_stay_in_history_during_a_new_ask(
+    page, app_server, seeded_provider
+):
+    from app.database import create_pool
+    from app.qa_models import AskRequest
+    from app.repository.qa import QARepository
+    from tests.fixtures.current_database import run_async
+
+    posted = []
+    page.on(
+        "request",
+        lambda req: (
+            posted.append(req.post_data_json)
+            if req.method == "POST" and req.url.endswith("/qa/ask")
+            else None
+        ),
+    )
+
+    def interrupt_after_claim(route):
+        request = AskRequest.model_validate(route.request.post_data_json)
+
+        async def claim():
+            async with create_pool(app_server.database_url) as pool:
+                await QARepository(pool).claim(request, app_server.as_of)
+
+        run_async(claim)
+        route.abort()
+
+    dialog = open_ask(page, app_server)
+    page.route("**/qa/ask", interrupt_after_claim, times=1)
+    send(dialog, RENEWAL_QUESTION)
+    check = dialog.get_by_role("button", name="Check for answer")
+    expect(check).to_be_visible()
+    request_url = app_server.url + "/qa/requests/" + posted[0]["request_id"]
+    with page.expect_response(request_url) as checked:
+        check.click()
+    original = checked.value.json()
+    assert original["state"] == "processing"
+    page.reload()
+    with page.expect_response(request_url) as restored:
+        page.get_by_role("button", name="Ask AI", exact=True).click()
+    assert restored.value.json() == original
+
+    dialog.get_by_role("button", name="Start a new question").click(timeout=3000)
+    expect(dialog.get_by_label("What would you like to know?")).to_be_focused()
+    expect(dialog.get_by_role("button", name=ASK)).to_be_disabled()
+    assert len(posted) == 1
+    send(dialog, "Which DEA forms are used?")
+    expect(
+        dialog.get_by_text("Cannot answer from the available information")
+    ).to_be_visible()
+    assert len(posted) == 2
+    assert posted[1]["request_id"] != original["request_id"]
+    assert posted[1]["provider_id"] == seeded_provider.id
+    dialog.get_by_text("Question history", exact=True).click()
+    with page.expect_response(app_server.url + f"/qa/{original['id']}") as historical:
+        dialog.get_by_role("button", name=RENEWAL_QUESTION, exact=True).click()
+    assert historical.value.json() == original
+    expect(dialog.locator("#ask-answer")).to_contain_text("still processing")
+    assert page.request.get(request_url).json() == original
+    assert len(posted) == 2
+
+
+def test_knowledge_metadata_uses_hawaii_day_and_preserves_effective_dates(
+    page, app_server
+):
+    page.goto(app_server.url)
+    dates = page.evaluate("""async () => {
+        const {dateOrUnknown} = await import('/static/knowledge-ui.js');
+        return [dateOrUnknown('2026-11-24T04:00:00Z'), dateOrUnknown('2026-11-24')];
+    }""")
+    assert dates == ["2026-11-23", "2026-11-24"]

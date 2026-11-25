@@ -97,7 +97,8 @@ export function setupAskAI({api, getProvider, getRole, onBindingsChanged}) {
       return;
     }
     if (saved.state === "processing") {
-      showStatus("This question is still processing.", {recover: true});
+      showStatus("This question is still processing. You can check it in Question history if you start a new question.",
+        {recover: true, abandon: true});
       return;
     }
     pending.delete(attempt.provider_id);
@@ -203,7 +204,8 @@ export function setupAskAI({api, getProvider, getRole, onBindingsChanged}) {
     if (!view) return;
     pending.delete(view.provider.id);
     remember();
-    showStatus();
+    view.opening = null;
+    clearQuestion();
     question.focus();
   });
   history.addEventListener("toggle", () => { if (view && history.open) loadHistory(view); });

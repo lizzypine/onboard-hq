@@ -577,3 +577,68 @@ def test_broad_questions_from_either_row_retrieve_all_configured_topics(
         assert {vid for vid, keyword, vector in ranked if keyword and vector} == {
             version.id for version in versions
         }
+
+
+@pytest.mark.parametrize(
+    "question,include_dental",
+    [
+        ("Which continuing education do I need for opioid prescribing?", False),
+        ("What CE is required for dentists prescribing controlled medications?", False),
+        ("Does dental license CE include education on opioid prescribing?", True),
+        (
+            "Can dentists count CE for both license renewal and opioid prescribing?",
+            True,
+        ),
+        ("What continuing education do I need?", True),
+    ],
+)
+def test_education_questions_keep_prescriber_evidence_in_both_search_paths(
+    client, db_url, seeded_provider, question, include_dental
+):
+    import psycopg
+
+    from tests.qa_fixtures import publish_passages
+    from tests.test_qa import ask, ask_body
+
+    async def seed():
+        async with create_pool(db_url) as pool:
+            repo = KnowledgeRepository(pool)
+            versions = {}
+            for source, excerpt in (
+                (
+                    "prescriber-education",
+                    "NED prescriber education on controlled medications.",
+                ),
+                ("dea-training", "DEA MATE education on opioid prescribing."),
+                ("board-renewal", "Dental license continuing education for renewal."),
+            ):
+                version = await publish_passages(
+                    repo,
+                    source,
+                    {"revision": "Fixture"},
+                    [{"section": "CE", "text": excerpt, "page": 1}],
+                )
+                versions[source] = version.id
+            return versions
+
+    versions = asyncio.run(seed())
+    required = {versions["prescriber-education"], versions["dea-training"]}
+    if include_dental:
+        required.add(versions["board-renewal"])
+    row = next(
+        r for r in seeded_provider.requirements if r.name == "Hawaii dental license"
+    )
+    answer = ask(client, ask_body(seeded_provider, question, requirement_id=row.id))
+    assert answer["topic_hint"] == "dental"
+    with psycopg.connect(db_url) as conn:
+        captured = conn.execute(
+            "SELECT version_id FROM qa_corpus_versions WHERE run_id=%s", (answer["id"],)
+        ).fetchall()
+        ranks = conn.execute(
+            "SELECT version_id,keyword_rank,vector_rank FROM qa_retrieved_chunks WHERE run_id=%s",
+            (answer["id"],),
+        ).fetchall()
+    assert required <= {version for (version,) in captured}
+    assert required <= {
+        version for version, keyword, vector in ranks if keyword and vector
+    }

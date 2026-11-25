@@ -609,3 +609,19 @@ def test_retry_read_stays_coherent_when_generation_commits_after_run_select(
     assert completed["outcome"] == "supported"
     assert completed["claims"]
     assert ask(client, body) == completed
+
+
+def test_invalid_gateway_port_stores_failed_answer_under_claimed_uuid(
+    client, seeded_provider, monkeypatch
+):
+    from tests.knowledge_fixtures import configure_invalid_embedding_port
+
+    publish_text(client)
+    configure_invalid_embedding_port(monkeypatch, "65536")
+    del app.dependency_overrides[get_embedding_client]
+    body = ask_body(seeded_provider)
+    answer = ask(client, body)
+    assert_unavailable(answer)
+    assert "example.invalid" not in json.dumps(answer)
+    assert "synthetic-test-token" not in json.dumps(answer)
+    assert client.get(f"/qa/requests/{body['request_id']}").json() == answer
