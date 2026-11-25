@@ -247,6 +247,10 @@ def test_monitoring_layout_and_keyboard_access(page, app_server):
     page.screenshot(path=directory / "monitoring-desktop.png", full_page=True)
     page.set_viewport_size({"width": 390, "height": 844})
     assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    guide_actions = page.get_by_role(
+        "button", name="Ask about this requirement", exact=True
+    )
+    expect(guide_actions).to_have_count(2)
     scroll = page.get_by_role("region", name="Scrollable checklist", exact=True)
     scroll.focus()
     expect(scroll).to_be_focused()
@@ -257,6 +261,9 @@ def test_monitoring_layout_and_keyboard_access(page, app_server):
     ).to_be_focused()
     expect(page.get_by_role("tooltip")).to_be_visible()
     page.keyboard.press("Escape")
+    for action in guide_actions.all():
+        page.keyboard.press("Tab")
+        expect(action).to_be_focused()
     page.keyboard.press("Tab")
     expect(page.get_by_label("Original update", exact=True)).to_be_focused()
     page.screenshot(path=directory / "monitoring-narrow.png", full_page=True)

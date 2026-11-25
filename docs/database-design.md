@@ -6,14 +6,15 @@ This document records the reviewed PostgreSQL data model for the synthetic
 provider-onboarding prototype. It is a design reference, not an implementation
 plan or executable SQL. Keep `docs/proposal.md` unchanged.
 
-The implemented relational model contains **twelve application tables**, described
+The implemented relational model contains **twenty-eight application tables**, described
 by [the generated schema](../db/schema.sql) and
 [the migration definitions](../db/migrations/). The first three migrations describe
 the former eight-table UUID/JSON schema; the fourth performs the coordinated
 integer-ID conversion, complete-checklist versioning, and normalized snapshots and
 warnings. The fifth adds provider-only checklist rows and immutable initial
-values for creation recovery, retaining twelve tables. Existing app workflows use
-that schema. Migrations are not applied
+values for creation recovery, retaining twelve onboarding tables. The sixth adds ten
+licensing knowledge tables for the source foundation. The seventh adds six
+tables for retained questions and citations. Migrations are not applied
 automatically; follow [the cutover runbook](database-cutover.md) for an existing
 database and obtain explicit authorization before changing Neon.
 
@@ -89,7 +90,7 @@ no `retired_at` column is included in this target model.
 
 ## Entity relationship diagram
 
-This diagram shows the implemented relational model. Composite ownership and
+This diagram shows the implemented relational onboarding model. The licensing relations are described below. Composite ownership and
 standard-row template-membership constraints are specified separately below.
 
 ```mermaid
@@ -582,27 +583,15 @@ Kekoa keeps version 1 and his progress after version 2 is configured. Malia star
 with version 2. Statuses live in their individual `requirements` rows, not in the
 shared template membership.
 
-## Licensing substeps and knowledge — proposed extension
+## Licensing substeps and knowledge
 
-This section describes the target for the separate
-[Licensing Substeps and Ask AI design](superpowers/specs/2026-11-22-licensing-knowledge-design.md).
-It is proposed for review, not implemented by `db/schema.sql` and not authorization
-to implement or migrate. The existing twelve tables and their constraints remain
-the implemented model. Keep `docs/proposal.md` unchanged.
+The [Licensing Substeps and Ask AI design](superpowers/specs/2026-11-22-licensing-knowledge-design.md) covers source management, question answering and proposed substeps. Migration `20261122000200_knowledge_sources.sql` implements the source foundation. Migration `20261122000300_knowledge_answers.sql` implements question answering and citation retention. Assigned substeps remain a separate proposal.
 
-Use the existing Neon PostgreSQL database with the `vector` extension for document
-embeddings and PostgreSQL full-text search for keywords. No separate vector service
-or graph database is proposed. Start with exact similarity over the eligible
-corpus and combine ranked results with reciprocal rank fusion. Approximate vector
-indexes and reranking require later measurements. Database/test environments need
-an explicitly supported pgvector version before implementation proceeds.
+### Implemented source foundation
 
-### Source and retrieval target
+PostgreSQL 18 with pgvector 0.8.7 stores original content, passages, PostgreSQL full-text terms and vectors. The default space uses `text-embedding-3-small`, version `1`, with 1536 dimensions. A dimension constraint and space foreign key validate each stored vector. The active space and revision switch together after a complete reindex of all published versions. Migration, source import and source review are explicit operations.
 
-The following names describe relational responsibilities; the implementation plan
-will finalize column-level contracts and migrations without changing these rules.
-
-| Proposed relation | One row stores |
+| Implemented relation | One row stores |
 | --- | --- |
 | `knowledge_documents` | A source identity, title, publisher/source kind, and configured source URL or internal-guide identity. |
 | `knowledge_versions` | An immutable published content version, original content, checksum, stated revision, retrieval/review/effective metadata, and source-document reference; drafts may change until publication. |
@@ -612,13 +601,25 @@ will finalize column-level contracts and migrations without changing these rules
 | `embedding_spaces` | A specific embedding model/version, dimensions, and activation identity. |
 | `knowledge_embeddings` | One chunk's numeric vector in one embedding space, unique by chunk and space. |
 | `requirement_knowledge_links` | A configured provider-type/requirement-definition binding to a knowledge topic; it does not alter checklist membership. |
+| `knowledge_state` | A singleton with the active embedding-space ID and corpus revision. |
+| `knowledge_review_issues` | One unresolved issue on a source draft. Every issue must be resolved before publication. |
+
+The source byte limit is 16 MiB. Original bytes and their generated SHA-256 checksum stay in PostgreSQL. Drafts retain text and section/page offsets. Published, superseded and withdrawn evidence is immutable. Manager operations have UUID retry identities, payload fingerprints and saved receipts. Publication locks the corpus, verifies the draft revision, stores complete validated active-space vectors and changes both active versions atomically. Withdrawing a version preserves its original and chunks.
+
+### Implemented question and citation relations
+
+| Implemented relation | One row stores |
+| --- | --- |
 | `qa_runs` | A retryable question, captured selected-provider/type/requirement context, model/retrieval configuration, processing/outcome state, and validated terminal answer/failure metadata. |
+| `qa_run_topics` | One resolved question topic retained for later eligibility checks. |
 | `qa_corpus_versions` | One source version eligible in the corpus snapshot captured for a question. |
-| `qa_retrieved_chunks` | One retrieved candidate passage and its keyword/vector/fused ranks or scores for that question. |
+| `qa_retrieved_chunks` | One ranked candidate or adjacent context passage, with keyword/vector/fused ranks and the order of passages supplied to the answer agent. |
 | `qa_claims` | One ordered final answer claim belonging to a QA run. |
 | `qa_citations` | One claim's supporting retrieved chunk, exact quoted text/span, and validated locator reference. |
 
-Use foreign keys for all parent/ownership relations and relational rows for scopes,
+Foreign keys enforce provider/requirement ownership and the chain from each citation to an ordered claim and a supplied context passage from the captured corpus. Provider-owned question history follows the existing database deletion boundary. Archiving preserves it. Shared source versions and originals remain retained.
+
+Relational rows represent scopes,
 candidates, claims, and citations. The numeric pgvector value and the derived
 `tsvector` search representation are explicit search-data exceptions to the
 no-array/list convention; neither stores a relationship collection. Their original
@@ -633,9 +634,7 @@ restricted to eligible approved versions. Effective dates are optional evidence,
 not inferred from URL timestamps. Unknown dates remain unknown.
 
 Retain the original official content inside the controlled source-version storage
-so saved citations do not depend on a remote PDF remaining at the same URL. The
-builder may choose bounded PostgreSQL binary/text storage for this small corpus;
-an external object store is not required. No document-upload route is introduced.
+so saved citations do not depend on a remote PDF remaining at the same URL. The source foundation uses bounded PostgreSQL binary/text storage. No document-upload route is introduced.
 Internal contact text is approved procedure evidence, not a provider's personal
 onboarding record. No real employee forms or filled applications enter the corpus.
 
@@ -644,7 +643,29 @@ candidates, claims, and citations with foreign keys to immutable evidence. Reche
 corpus eligibility before publishing an in-flight answer. A changed corpus marks
 that result outdated and requires explicit re-asking, not automatic model replay.
 Saved historical answers remain labeled historical when sources change. A retry of
-the same request/context returns the same saved result; conflicting reuse fails.
+the same request and normalized input reads the same retained record. Conflicting
+reuse returns 409. An archived provider can still ask. A worker interrupted before
+a terminal write can leave a retained processing receipt for reconciliation. Identical
+POST retries also read that receipt.
+
+Both search paths use the same captured published version IDs. Each version needs
+one reviewed scope row matching provider type, jurisdiction and one captured topic.
+The Hawaii request date controls effective periods. Dental and renewal topics share
+exception coverage. NED, PDMP and DEA questions share related prerequisite guidance.
+General licensing, internal and statutory topics are included. Clear question
+intent selects a topic family. Ambiguous and unrecognized questions search all
+supported topics within the provider scope. The requirement hint provides answer
+context. A source can retain an unresolved topic in draft. Publication uses the
+same configured vocabulary as retrieval and checks every topic before embedding.
+Later eligibility checks use the retained topic rows. The vector path uses the
+captured active space. Each path keeps at most 20 ranks. Reciprocal rank fusion
+uses a constant of 60. Generation receives at most 12 passages and 24,000 passage
+characters, with room reserved for adjacent same-section qualifications. The
+answer agent has no mutation or network tools. Stored citations keep only references
+and exact spans. Response metadata comes from the immutable source records. A changed
+corpus revision or effective-period eligibility marks the result outdated on save or
+read. Offline fixtures check retrieval and citation structure. Live semantic quality
+requires a separate authorized evaluation.
 
 ### Assigned substeps and reviewed progress target
 
@@ -696,16 +717,15 @@ rollup, automatic parent save, substep dates, or recurring task reset is propose
 Managed sign-in is deferred. A future authentication service will handle
 credentials; the application's account references and Manager/Proposer role
 mapping will be designed then. Do not add a login, password, session, or staff
-account table or password-hash column to this twelve-table target. Current
+account table or password-hash column to the current schema. Current
 simulated roles are not real access control.
 
 Do not add real employee data, provider-profile editing, provider version upgrades,
 post-creation requirement additions/removals or other checklist exceptions,
 archive-event history, document uploads,
 forwarded-email processing, automated reminders, model routing, stored completion
-flags, or stored dashboard counts. Licensing substeps and policy retrieval/RAG
-remain unimplemented; the separate proposed extension above describes their
-bounded review target rather than changing the existing slice. Completion and
+flags, or stored dashboard counts. Licensing substeps remain proposed. Source management, scope filtering and indexing
+are implemented, along with cited question generation and answer retention. Completion and
 Hawaii-date deadline monitoring stay derived from saved statuses and deadlines.
 
 The forward migration, data transformation, integer API contracts, captured-state

@@ -1,0 +1,136 @@
+"""Authorize access to guidance and coordinate reviewed source changes."""
+
+from uuid import UUID
+
+from app.embeddings import EmbeddingClient, validate_vectors
+from app.knowledge_models import (
+    DraftRequest,
+    EditDraftRequest,
+    KnowledgeDocument,
+    KnowledgeScope,
+    KnowledgeVersion,
+    Media,
+    OperationReceipt,
+    PublishRequest,
+    SourceReviewOptions,
+    WithdrawRequest,
+)
+from app.repository.knowledge import KnowledgeRepository
+from app.rules.knowledge import (
+    JURISDICTION,
+    SUPPORTED_TOPICS,
+    fingerprint,
+    require_manager,
+    require_publishable,
+    require_revision,
+    require_space,
+    require_visible_version,
+    visible_documents,
+)
+from app.source_extraction import extract_source
+
+
+def source_review_options(role: str) -> SourceReviewOptions:
+    require_manager(role)
+    return SourceReviewOptions(
+        topics=sorted(SUPPORTED_TOPICS),
+        default_scope=KnowledgeScope(
+            provider_type="Dentist", jurisdiction=JURISDICTION, topic="licensing"
+        ),
+    )
+
+
+async def list_documents(
+    repo: KnowledgeRepository, role: str
+) -> list[KnowledgeDocument]:
+    return visible_documents(await repo.list_documents(), role)
+
+
+async def read_version(
+    repo: KnowledgeRepository, vid: int, role: str
+) -> KnowledgeVersion:
+    version = await repo.get_version(vid)
+    require_visible_version(role, version.status)
+    return version
+
+
+async def read_original(
+    repo: KnowledgeRepository, vid: int, role: str
+) -> tuple[Media, bytes]:
+    status, media, raw = await repo.original(vid)
+    require_visible_version(role, status)
+    return media, raw
+
+
+async def read_operation(
+    repo: KnowledgeRepository, operation_id: UUID, role: str
+) -> OperationReceipt:
+    require_manager(role)
+    return await repo.operation(operation_id)
+
+
+async def create_draft(
+    repo: KnowledgeRepository, doc: int, req: DraftRequest, role: str
+) -> OperationReceipt:
+    require_manager(role)
+    raw = req.text.encode()
+    return await repo.create_draft(
+        doc,
+        req,
+        raw,
+        "text/plain",
+        extract_source(raw, "text/plain"),
+        fingerprint("create", doc, req),
+    )
+
+
+async def edit_draft(
+    repo: KnowledgeRepository, vid: int, req: EditDraftRequest, role: str
+) -> OperationReceipt:
+    require_manager(role)
+    digest = fingerprint("edit", vid, req)
+    if saved := await repo.check_retry(req.operation_id, digest):
+        return saved
+    version = await repo.get_version(vid)
+    parsed = (
+        extract_source(req.text.encode(), "text/plain")
+        if req.text != version.text and version.document.source_kind == "internal"
+        else None
+    )
+    return await repo.edit_draft(vid, req, parsed, digest)
+
+
+async def publish(
+    repo: KnowledgeRepository,
+    vid: int,
+    req: PublishRequest,
+    role: str,
+    client: EmbeddingClient,
+) -> OperationReceipt:
+    require_manager(role)
+    digest = fingerprint("publish", vid, req)
+    captured = await repo.prepare_publication(vid, req.operation_id, digest)
+    if isinstance(captured, OperationReceipt):
+        return captured
+    v, space = captured
+    require_revision(v, req.expected_revision, "draft")
+    require_publishable(v, req.confirmed_review)
+    require_space(space, client.model, client.version, client.dimensions)
+    vectors = await client.embed([c.text for c in v.chunks])
+    validate_vectors(vectors, len(v.chunks), space.dimensions)
+    return await repo.publish(vid, req, digest, space, vectors)
+
+
+async def withdraw(
+    repo: KnowledgeRepository, vid: int, req: WithdrawRequest, role: str
+) -> OperationReceipt:
+    require_manager(role)
+    return await repo.withdraw(vid, req, fingerprint("withdraw", vid, req))
+
+
+async def reindex(repo: KnowledgeRepository, client: EmbeddingClient) -> None:
+    revision, space, chunks = await repo.prepare_space(
+        client.model, client.version, client.dimensions
+    )
+    vectors = await client.embed([c.text for c in chunks]) if chunks else []
+    await repo.activate_space(revision, space, chunks, vectors)

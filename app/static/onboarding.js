@@ -2,9 +2,11 @@
 
 import {renderReviewControls} from "./review.js?v=4";
 import {providerLabel, setupProviderCreation} from "./providers.js?v=4";
-import {setupChecklist} from "./checklist.js?v=6";
+import {setupChecklist} from "./checklist.js?v=7";
 import {setupDateHelp} from "./date-help.js?v=4";
 import {setupProviderLifecycle} from "./provider-lifecycle.js?v=2";
+import {setupAskAI} from "./ask-ai.js";
+import {setupKnowledgeManager} from "./knowledge-manager.js";
 
 setupDateHelp();
 
@@ -58,6 +60,7 @@ function setBusy(value) {
   creation?.setBusy(value);
   checklist?.setBusy(value);
   lifecycle?.setBusy(value);
+  askAI.setBusy(value);
 }
 
 function renderMonitoring() {
@@ -203,6 +206,7 @@ async function loadState() {
   state.history = history;
   state.edits = edits;
   state.checklistOptions = dashboard.checklist_options;
+  askAI.syncProvider(state.provider);
   renderReviews();
   renderChecklist();
   checklist?.onSnapshotLoaded(state.edits);
@@ -215,6 +219,7 @@ function clearSnapshot() {
   state.history = [];
   state.edits = [];
   state.checklistOptions = [];
+  askAI.syncProvider(null);
   renderReviews();
   renderChecklist();
 }
@@ -274,8 +279,22 @@ document.getElementById("update-form").addEventListener("submit", async event =>
 });
 
 updateText.addEventListener("input", () => { state.pending = null; });
+const getProvider = () => state.provider;
+const getRole = () => roleSelect.value;
+const askAI = setupAskAI({api, getProvider, getRole,
+  onBindingsChanged: () => checklist.refreshRequirementDetails()});
+const knowledge = setupKnowledgeManager({api, getProvider, getRole});
+
+function requirementDetails(requirement) {
+  const pending = pendingDetails.get(requirement.id);
+  const action = askAI.requirementAction(requirement);
+  if (!pending || !action) return pending || action;
+  if (!pending.contains(action)) pending.prepend(action);
+  return pending;
+}
+
 checklist = setupChecklist({api, roleSelect, setBusy, onSaved: loadState,
-  requirementDetails: requirement => pendingDetails.get(requirement.id), onLegacyProvider: async provider => {
+  requirementDetails, onLegacyProvider: async provider => {
   document.getElementById("provider-state").value = provider.archived_at ? "archived" : "active";
   state.preferredProviderId = provider.id;
   if (!await initialize(provider.id) || state.provider?.id !== provider.id) throw new Error("Saved view unavailable.");
@@ -312,7 +331,14 @@ lifecycle = setupProviderLifecycle({api, roleSelect, setBusy, onChanged: async p
   providerSelect.replaceChildren();
   clearSnapshot();
 }});
-roleSelect.addEventListener("change", () => { renderReviews(); creation.syncRole(); checklist.syncRole(); lifecycle.syncRole(); });
+roleSelect.addEventListener("change", () => {
+  renderReviews();
+  creation.syncRole();
+  checklist.syncRole();
+  lifecycle.syncRole();
+  knowledge.syncRole();
+});
+knowledge.syncRole();
 function changeProviderSelection() {
   lifecycle.clearRecovery();
   state.preferredProviderId = null;

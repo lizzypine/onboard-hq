@@ -79,7 +79,7 @@ command passes the connection URL to `pg_dump` as a process argument. The commit
 using the same migrations and PostgreSQL 18 tools. Regenerate it there after schema
 changes; keep Neon credentials in the environment only.
 
-The schema has twelve application tables, with integer resource IDs, whole-checklist
+The onboarding slice has twelve application tables, with integer resource IDs, whole-checklist
 versions, normalized captured context/warnings, and immutable manual edit history.
 The UUID-to-integer change requires a coordinated maintenance-window cutover for an
 existing database; stop/drain the old application and verify a final backup before
@@ -123,6 +123,81 @@ Browser contexts and server processes are isolated per test; a failed browser te
 keeps its trace in ignored `test-results/`. CI installs Chromium and its system
 dependencies and retains failure traces as an artifact. Focused pure rule tests can
 still run without a database, for example `uv run pytest tests/test_dates.py`.
+
+## Licensing knowledge sources
+
+The source foundation adds ten application tables. Disposable PostgreSQL 18 needs pgvector 0.8.7. Install the pinned release with `PG_CONFIG=/opt/homebrew/opt/postgresql@18/bin/pg_config bash scripts/install-pgvector.sh` on Apple Silicon. On other systems point `PG_CONFIG` to the PostgreSQL 18 executable. The installer verifies the source archive checksum before building. CI runs its service on the matching pgvector image.
+
+Licensing uses migrations `20261122000200_knowledge_sources.sql` and
+`20261122000300_knowledge_answers.sql`. Apply them to the intended development
+database using the dbmate setup above. Confirm that pgvector is available and
+dbmate reports `Pending: 0`. Applying either migration to Neon and ingesting or
+publishing sources there require separate authorization.
+
+List source identifiers and import an individual draft after configuring the Dentist
+catalog in the development database.
+
+```sh
+uv run python -m app.knowledge_sources list
+uv run --env-file .env python -m app.knowledge_sources ingest dentist-application
+uv run --env-file .env python -m app.knowledge_sources ingest internal-guide
+```
+
+A fresh database starts with an empty published corpus. Each official source must
+be reachable at its configured direct URL, return the expected PDF or HTML content
+type, and pass extraction. The CLI rejects unlisted URLs and redirects. A failed
+fetch leaves the existing published version available. If an official source moves
+and the old source key already has a database record, register a distinct
+controlled source key for the new URL. Preserve the old URL and originals for
+citations. Withdraw the old publication explicitly when the replacement is ready
+and appropriate. New versions under an unchanged source identity supersede the
+previous publication under that same identity when published.
+
+In **Manager** mode, open **Manage licensing guidance**, then **Review draft**.
+Check the original, extracted text, passage locations, applicability, and any
+review issues. Official extracted text is read-only. Edit internal instructions in
+the draft and check the preview. Unknown dates can remain unset. Resolve and save
+any issues, choose supported topics, confirm review, then select **Publish
+reviewed version**. The internal guide is imported as a draft with unresolved
+items. Publish it only after resolving those items. To remove published guidance
+from new questions, open its version and confirm **Withdraw version**.
+Historical answers still cite the retained version. If an operation response is
+interrupted, **Check source operation** looks up its saved receipt.
+
+The embedding adapter shares the configured gateway/token. Its default model is `text-embedding-3-small`, version `1`, with 1536 dimensions. After changing `EMBEDDING_MODEL`, `EMBEDDING_VERSION` or `EMBEDDING_DIMENSIONS`, explicitly run `uv run --env-file .env python -m app.knowledge_sources activate-space` against the intended development database. It embeds published passages outside transactions and activates the new space after all vectors are ready. A concurrent publication requires restarting the reindex.
+
+## Saved licensing questions
+
+The licensing QA migration adds six tables for questions, captured topics and source versions,
+retrieval ranks, claims and citations. Both simulated roles can open **Ask AI**
+beside the checklist heading for an active or archived provider. Requirements
+with configured licensing bindings also offer **Ask about this requirement**.
+Applicable sources must be published before Ask AI can cite them. The server derives Hawaii and
+the selected provider type. Clear question intent selects related topics. Broad and
+unrecognized questions search all supported topics within the selected provider scope.
+A linked requirement provides context for the answer. Both search paths use the same
+reviewed type, jurisdiction, topic and effective-period scope.
+
+`POST /qa/ask` uses a new UUID `request_id`, the selected integer `provider_id`,
+an optional `requirement_id` belonging to that provider, and the question.
+`GET /qa/requests/{request_id}` reconciles an interrupted response.
+`GET /qa/{answer_id}` reopens a retained answer, and
+`GET /providers/{provider_id}/answers` lists that provider’s question history.
+Identical submissions return the existing result or processing receipt. Reusing
+a request UUID with changed input returns 409. Each answer records its outcome,
+claims and exact retained citations. Service failures have a distinct outcome.
+A source change or date change that affects applicability can mark a retained
+answer outdated. Ask a new question with a new UUID for current guidance.
+If **Check for answer** finds a question still processing, select **Start a new
+question** to ask independently. The first question remains available in
+**Question history**, where you can check its status and open its original
+citations. Questions and answers are separate from onboarding progress and review
+history. Saved licensing substeps are future work.
+
+The licensing question fixtures exercise exact hybrid retrieval and citation
+plumbing using source-bound excerpts, deterministic embeddings and TestModel
+on a disposable local database. The same fixtures record the semantic evaluation
+rubric. Live model quality has not been measured.
 
 ## What this feature does
 

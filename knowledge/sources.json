@@ -1,0 +1,210 @@
+[
+  {
+    "source_key": "dentist-application",
+    "title": "Dentist application instructions",
+    "publisher": "Hawaii Board of Dentistry",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/01/Require-Instruct-App-for-Dentist_08.24R.pdf",
+    "media_type": "application/pdf",
+    "topic": "dental"
+  },
+  {
+    "source_key": "license-verification",
+    "title": "Verification of licensure",
+    "publisher": "Hawaii Board of Dentistry",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/01/Verification-of-Lic-DT-14a_09.18R.pdf",
+    "media_type": "application/pdf",
+    "topic": "dental"
+  },
+  {
+    "source_key": "board-laws",
+    "title": "Board of Dentistry laws and rules",
+    "publisher": "Hawaii Board of Dentistry",
+    "url": "https://cca.hawaii.gov/pvl/boards/dentist/statute_rules/",
+    "media_type": "text/html",
+    "topic": "dental"
+  },
+  {
+    "source_key": "hrs-448",
+    "title": "HRS Chapter 448",
+    "publisher": "Hawaii State Legislature",
+    "url": "https://data.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0448/HRS_0448-.htm",
+    "media_type": "text/html",
+    "topic": "dental"
+  },
+  {
+    "source_key": "hrs-436b",
+    "title": "HRS Chapter 436B",
+    "publisher": "Hawaii State Legislature",
+    "url": "https://data.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0436B/HRS_0436B-.htm",
+    "media_type": "text/html",
+    "topic": "dental"
+  },
+  {
+    "source_key": "har-79",
+    "title": "HAR Chapter 79",
+    "publisher": "Hawaii Board of Dentistry",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/02/HAR-16-79-C0816.pdf",
+    "media_type": "application/pdf",
+    "topic": "dental"
+  },
+  {
+    "source_key": "board-renewal",
+    "title": "Board of Dentistry renewal resources",
+    "publisher": "Hawaii Board of Dentistry",
+    "url": "https://cca.hawaii.gov/pvl/boards/dentist/",
+    "media_type": "text/html",
+    "topic": "renewal"
+  },
+  {
+    "source_key": "virtual-ce-waiver",
+    "title": "Virtual continuing education waiver",
+    "publisher": "Hawaii Board of Dentistry",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/03/Notice-Regarding-Extension-of-Waiver-Accepting-Virtual-CEs-2026-2027.pdf",
+    "media_type": "application/pdf",
+    "topic": "renewal"
+  },
+  {
+    "source_key": "ce-sponsors",
+    "title": "Continuing education approval chart",
+    "publisher": "Hawaii Board of Dentistry",
+    "url": "https://cca.hawaii.gov/wp-content/uploads/2026/03/DEN-approval-chart-2026-2027.pdf",
+    "media_type": "application/pdf",
+    "topic": "renewal"
+  },
+  {
+    "source_key": "ned-resources",
+    "title": "Narcotics Enforcement Division resources",
+    "publisher": "Hawaii Narcotics Enforcement Division",
+    "url": "https://law.hawaii.gov/about-us/law-enforcement-division/narcotics-enforcement-division/",
+    "media_type": "text/html",
+    "topic": "ned"
+  },
+  {
+    "source_key": "ned-renewal",
+    "title": "NED renewal information",
+    "publisher": "Hawaii Narcotics Enforcement Division",
+    "url": "https://law.hawaii.gov/renewal-information/",
+    "media_type": "text/html",
+    "topic": "ned"
+  },
+  {
+    "source_key": "ned-instructions",
+    "title": "NED practitioner instructions",
+    "publisher": "Hawaii Narcotics Enforcement Division",
+    "url": "https://law.hawaii.gov/wp-content/uploads/2024/02/App-Instructions-Practitioner.pdf",
+    "media_type": "application/pdf",
+    "topic": "ned"
+  },
+  {
+    "source_key": "ned-attestation",
+    "title": "Attestation to Hawaii law and requirements",
+    "publisher": "Hawaii Narcotics Enforcement Division",
+    "url": "https://law.hawaii.gov/wp-content/uploads/2025/02/Attestation-to-Hawaii-Law-and-Requirements-Form_eff-01-01-24.pdf",
+    "media_type": "application/pdf",
+    "topic": "ned"
+  },
+  {
+    "source_key": "prescriber-education",
+    "title": "Prescriber education attestation",
+    "publisher": "Hawaii Narcotics Enforcement Division",
+    "url": "https://law.hawaii.gov/wp-content/uploads/2026/01/2026-Prescriber-Education-Form-fillable.pdf",
+    "media_type": "application/pdf",
+    "topic": "ned"
+  },
+  {
+    "source_key": "pdmp-faq",
+    "title": "HI-PDMP frequently asked questions",
+    "publisher": "Hawaii Narcotics Enforcement Division",
+    "url": "https://law.hawaii.gov/wp-content/uploads/2023/12/HAWAII-PDMP-FREQUENTLY-ASKED-QUESTIONS_updated-2018-FOR-WEB.pdf",
+    "media_type": "application/pdf",
+    "topic": "pdmp"
+  },
+  {
+    "source_key": "ned-help",
+    "title": "NED portal help",
+    "publisher": "Hawaii Narcotics Enforcement Division",
+    "url": "https://ned.ehawaii.gov/portal/wf/page/help.html",
+    "media_type": "text/html",
+    "topic": "ned"
+  },
+  {
+    "source_key": "pdmp-login",
+    "title": "HI-PDMP login destination",
+    "publisher": "Hawaii Narcotics Enforcement Division",
+    "url": "https://hawaii.pmpaware.net/login",
+    "media_type": "text/html",
+    "topic": "pdmp"
+  },
+  {
+    "source_key": "dea-registration",
+    "title": "DEA registration",
+    "publisher": "U.S. Drug Enforcement Administration",
+    "url": "https://www.deadiversion.usdoj.gov/drugreg/registration.html",
+    "media_type": "text/html",
+    "topic": "dea"
+  },
+  {
+    "source_key": "dea-faq",
+    "title": "DEA registration questions",
+    "publisher": "U.S. Drug Enforcement Administration",
+    "url": "https://www.deadiversion.usdoj.gov/faq/registration-faq.html",
+    "media_type": "text/html",
+    "topic": "dea"
+  },
+  {
+    "source_key": "dea-manual",
+    "title": "Practitioner’s Manual",
+    "publisher": "U.S. Drug Enforcement Administration",
+    "url": "https://www.deadiversion.usdoj.gov/GDP/%28DEA-DC-071%29%28EO-DEA226%29_Practitioner%27s_Manual_%28final%29.pdf",
+    "media_type": "application/pdf",
+    "topic": "dea"
+  },
+  {
+    "source_key": "dea-training",
+    "title": "DEA training requirement",
+    "publisher": "U.S. Drug Enforcement Administration",
+    "url": "https://www.deadiversion.usdoj.gov/pubs/docs/MATE_training.html",
+    "media_type": "text/html",
+    "topic": "dea"
+  },
+  {
+    "source_key": "dea-training-faq",
+    "title": "DEA training questions",
+    "publisher": "U.S. Drug Enforcement Administration",
+    "url": "https://www.deadiversion.usdoj.gov/faq/MATE_Act_faq.html",
+    "media_type": "text/html",
+    "topic": "dea"
+  },
+  {
+    "source_key": "hrs-436b-9",
+    "title": "HRS 436B-9, action on applications and abandonment",
+    "publisher": "Hawaii State Legislature",
+    "url": "https://data.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0436B/HRS_0436B-0009.htm",
+    "media_type": "text/html",
+    "topic": "dental"
+  },
+  {
+    "source_key": "hrs-448-9",
+    "title": "HRS 448-9, application for licensure",
+    "publisher": "Hawaii State Legislature",
+    "url": "https://data.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0448/HRS_0448-0009.htm",
+    "media_type": "text/html",
+    "topic": "dental"
+  },
+  {
+    "source_key": "hrs-448-9-4",
+    "title": "HRS 448-9.4, ADEX examination",
+    "publisher": "Hawaii State Legislature",
+    "url": "https://data.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0448/HRS_0448-0009_0004.htm",
+    "media_type": "text/html",
+    "topic": "dental"
+  },
+  {
+    "source_key": "hrs-448-8-5",
+    "title": "HRS 448-8.5, continuing education requirements",
+    "publisher": "Hawaii State Legislature",
+    "url": "https://data.capitol.hawaii.gov/hrscurrent/Vol10_Ch0436-0474/HRS0448/HRS_0448-0008_0005.htm",
+    "media_type": "text/html",
+    "topic": "renewal"
+  }
+]

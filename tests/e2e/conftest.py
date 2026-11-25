@@ -60,6 +60,8 @@ class AppServer:
                 "DATABASE_URL": self.database_url,
                 "PYTHONPATH": str(self.source_root),
                 "PYTHONUNBUFFERED": "1",
+                "DISABLE_EMBEDDING_REQUESTS": "1",
+                "DISABLE_SOURCE_FETCH": "1",
             },
             stdout=self.log_handle,
             stderr=subprocess.STDOUT,
