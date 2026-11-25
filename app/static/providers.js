@@ -1,6 +1,6 @@
 "use strict";
 
-import {createProviderWizard} from "./provider-wizard.js?v=4";
+import {createProviderWizard} from "./provider-wizard.js?v=5";
 import {clearCreationAttempt, readCreationAttempt, writeCreationAttempt} from "./provider-recovery.js?v=4";
 
 export function providerLabel(provider, providers) {

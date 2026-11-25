@@ -111,7 +111,7 @@ PAGE = """<!doctype html>
     }
   </style>
   <link rel="stylesheet" href="/static/knowledge.css?v=1">
-  <script src="/static/onboarding.js?v=8" type="module"></script>
+  <script src="/static/onboarding.js?v=9" type="module"></script>
 </head>
 <body>
 <main>

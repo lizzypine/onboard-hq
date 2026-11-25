@@ -31,6 +31,7 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 - `app/static/provider-recovery.js`: validated frozen creation requests in sessionStorage; no HTTP/model calls or automatic replay.
 - `app/static/date-help.js`: shared Expected completion date explanation on hover/focus/tap, scoped to the active dialog when open; SQL/API fields remain named scheduled_date.
 - `app/static/checklist.js`: saved checklist rows, status badges, in-place refresh of controller-supplied requirement detail nodes, one Manager edit draft, and frozen manual-save recovery. No provider/history loading, suggestion review calls, or model calls.
+- `app/static/checklist-order.js`: shared presentation-only deadline ordering for saved checklists and provider-wizard previews/review; dated items first, earliest deadline first, alphabetical ties and undated items. Does not mutate input arrays.
 - `app/static/checklist-recovery.js`: validate frozen UUID-era drafts and read saved history by retained retry keys; no save POSTs or model calls. The checklist controller clears resolved drafts only after a coherent saved view loads.
 - `app/static/statuses.js`: safe native status dropdown and labeled badge DOM helpers; choices and tones come from the dashboard.
 - `app/static/review.js`: one suggestion's editable checklist comparison, draft date actions, validation, and manager decision callbacks. No data loading or persistence.
