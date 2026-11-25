@@ -579,6 +579,31 @@ def test_broad_questions_from_either_row_retrieve_all_configured_topics(
         }
 
 
+async def publish_education_sources(db_url, provider_type="Dentist"):
+    from tests.qa_fixtures import publish_passages
+
+    async with create_pool(db_url) as pool:
+        repo = KnowledgeRepository(pool)
+        versions = {}
+        for source, excerpt in (
+            (
+                "prescriber-education",
+                "NED prescriber education on controlled medications.",
+            ),
+            ("dea-training", "DEA MATE education on opioid prescribing."),
+            ("board-renewal", "Dental license continuing education for renewal."),
+        ):
+            version = await publish_passages(
+                repo,
+                source,
+                {"revision": "Fixture"},
+                [{"section": "CE", "text": excerpt, "page": 1}],
+                provider_type=provider_type,
+            )
+            versions[source] = version.id
+        return versions
+
+
 @pytest.mark.parametrize(
     "question,include_dental",
     [
@@ -590,38 +615,28 @@ def test_broad_questions_from_either_row_retrieve_all_configured_topics(
             True,
         ),
         ("What continuing education do I need?", True),
+        (
+            "Does the continuing education I take to renew my dentist license also count for DEA MATE training?",
+            True,
+        ),
+        ("Does dental license CE count toward MATE training?", True),
+        ("Can CE for my dental license satisfy MATE requirements?", True),
+        (
+            "Can CE for my Hawaii dental board license renewal also count toward DEA MATE training?",
+            True,
+        ),
+        (
+            "Does CE for my license to practice dentistry also satisfy DEA training?",
+            True,
+        ),
     ],
 )
 def test_education_questions_keep_prescriber_evidence_in_both_search_paths(
     client, db_url, seeded_provider, question, include_dental
 ):
-    import psycopg
-
-    from tests.qa_fixtures import publish_passages
     from tests.test_qa import ask, ask_body
 
-    async def seed():
-        async with create_pool(db_url) as pool:
-            repo = KnowledgeRepository(pool)
-            versions = {}
-            for source, excerpt in (
-                (
-                    "prescriber-education",
-                    "NED prescriber education on controlled medications.",
-                ),
-                ("dea-training", "DEA MATE education on opioid prescribing."),
-                ("board-renewal", "Dental license continuing education for renewal."),
-            ):
-                version = await publish_passages(
-                    repo,
-                    source,
-                    {"revision": "Fixture"},
-                    [{"section": "CE", "text": excerpt, "page": 1}],
-                )
-                versions[source] = version.id
-            return versions
-
-    versions = asyncio.run(seed())
+    versions = asyncio.run(publish_education_sources(db_url))
     required = {versions["prescriber-education"], versions["dea-training"]}
     if include_dental:
         required.add(versions["board-renewal"])
@@ -630,15 +645,63 @@ def test_education_questions_keep_prescriber_evidence_in_both_search_paths(
     )
     answer = ask(client, ask_body(seeded_provider, question, requirement_id=row.id))
     assert answer["topic_hint"] == "dental"
+    captured, ranked = captured_and_ranked_education_sources(db_url, answer["id"])
+    assert required <= captured
+    assert required <= ranked
+
+
+def captured_and_ranked_education_sources(db_url, run_id):
+    import psycopg
+
     with psycopg.connect(db_url) as conn:
         captured = conn.execute(
-            "SELECT version_id FROM qa_corpus_versions WHERE run_id=%s", (answer["id"],)
+            "SELECT version_id FROM qa_corpus_versions WHERE run_id=%s", (run_id,)
         ).fetchall()
         ranks = conn.execute(
             "SELECT version_id,keyword_rank,vector_rank FROM qa_retrieved_chunks WHERE run_id=%s",
-            (answer["id"],),
+            (run_id,),
         ).fetchall()
-    assert required <= {version for (version,) in captured}
-    assert required <= {
-        version for version, keyword, vector in ranks if keyword and vector
-    }
+    return (
+        {version for (version,) in captured},
+        {version for version, keyword, vector in ranks if keyword and vector},
+    )
+
+
+@pytest.mark.parametrize(
+    "question,provider_type,eligible_keys",
+    [
+        (
+            "Which continuing education do I need to renew my dental hygienist license?",
+            "Dental Hygienist",
+            {"board-renewal"},
+        ),
+        (
+            "As a dentist, which education does the DEA require for renewal?",
+            "Dentist",
+            {"prescriber-education", "dea-training"},
+        ),
+    ],
+)
+def test_education_search_respects_qualified_license_and_profession_only_mentions(
+    client, db_url, seeded_provider, question, provider_type, eligible_keys
+):
+    from app.models import StoredProvider
+    from tests.fixtures.current_database import configure_catalog
+    from tests.test_provider_creation import body, create
+    from tests.test_qa import ask, ask_body
+
+    provider = seeded_provider
+    if provider_type != seeded_provider.provider_type:
+        template = configure_catalog(
+            provider_type, ["Professional license"], url=db_url
+        )
+        provider = StoredProvider.model_validate(
+            create(client, body(provider_type_id=template.id))
+        )
+    versions = asyncio.run(publish_education_sources(db_url, provider_type))
+    answer = ask(client, ask_body(provider, question))
+    assert answer["provider_type"] == provider_type
+    captured, ranked = captured_and_ranked_education_sources(db_url, answer["id"])
+    expected = {versions[key] for key in eligible_keys}
+    assert captured == expected
+    assert ranked == expected

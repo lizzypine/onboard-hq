@@ -12,9 +12,16 @@ from app.rules.knowledge import (
 )
 
 DENTAL_TERMS = frozenset({"adex", "periodontal"})
+DENTAL_FIELD = r"(?:dental hygien(?:e|ists?)|hygienists?|dentists?|dentistry|dental)"
+LICENSE_TERM = r"licen[cs](?:es?|ing|ure)"
+DENTAL_CONTEXT = re.compile(
+    rf"\b(?:{DENTAL_FIELD}(?: s)? (?:{LICENSE_TERM}|renewals?)"
+    rf"|{LICENSE_TERM} (?:as (?:a |an )?|to practice ){DENTAL_FIELD}"
+    r"|board of dentistry|dental (?:board|ce|continuing ed(?:ucation)?))\b"
+)
 CONTROLLED_SUBSTANCE_TERMS = frozenset({"csr", "dea", "ned", "pdmp"})
 PRESCRIBING_TERMS = frozenset(
-    {"opioid", "opioids", "prescribing", "prescriber", "prescribers"}
+    {"mate", "opioid", "opioids", "prescribing", "prescriber", "prescribers"}
 )
 
 
@@ -23,16 +30,16 @@ def question_topics(question: str) -> list[str]:
     words = re.findall(r"\w+", question.casefold())
     normalized = " ".join(words)
     dental = not DENTAL_TERMS.isdisjoint(words) or bool(
-        re.search(
-            r"\bdental (?:ce|continuing ed(?:ucation)?|renewal|licen[cs](?:e|es|ing))\b",
-            normalized,
-        )
+        DENTAL_CONTEXT.search(normalized)
     )
     controlled = not CONTROLLED_SUBSTANCE_TERMS.isdisjoint(words) or any(
         phrase in normalized
         for phrase in (
             "controlled substance",
             "drug enforcement administration",
+            "mate act",
+            "mate training",
+            "medication access and training expansion",
             "narcotics enforcement division",
             "prescriber education",
             "prescription drug monitoring program",
