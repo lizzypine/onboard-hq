@@ -7,7 +7,7 @@ import pytest
 from playwright.sync_api import expect
 
 from tests.database import ROOT, configured_test_url
-from tests.e2e.test_review_workflow import drug_card, drug_row, open_history, propose
+from tests.e2e.test_review_workflow import drug_card, drug_row, propose, reviewed_card
 
 
 @pytest.fixture(autouse=True)
@@ -108,7 +108,6 @@ def test_monitoring_approval_reversal_and_restart(page, app_server, seeded_provi
     counts(page, overdue=2)
     app_server.restart()
     page.reload()
-    open_history(page)
     expect(drug_row(page)).to_contain_text("Incomplete")
     expect(indicator(page)).to_have_text("Overdue")
     counts(page, overdue=2)
@@ -117,7 +116,7 @@ def test_monitoring_approval_reversal_and_restart(page, app_server, seeded_provi
     page.get_by_label("Simulated role").select_option("manager")
     drug_card(page).first.get_by_role("button", name="Reject", exact=True).click()
     expect(page.locator("#request-status")).to_contain_text("Manager decision saved")
-    expect(drug_card(page).first).to_contain_text("Rejected")
+    expect(reviewed_card(page).filter(has_text="Rejected")).to_be_visible()
     counts(page, overdue=2)
 
 
@@ -261,9 +260,25 @@ def test_monitoring_layout_and_keyboard_access(page, app_server):
     ).to_be_focused()
     expect(page.get_by_role("tooltip")).to_be_visible()
     page.keyboard.press("Escape")
-    for action in guide_actions.all():
+    for name in (
+        "Insurance credentialing",
+        "Offer letter",
+        "Drug screening",
+        "Hawaii dental license",
+    ):
         page.keyboard.press("Tab")
-        expect(action).to_be_focused()
+        expect(
+            page.locator("#requirements").get_by_role("button", name=name, exact=True)
+        ).to_be_focused()
+    page.keyboard.press("Tab")
+    expect(guide_actions.first).to_be_focused()
+    for name in ("State NED license",):
+        page.keyboard.press("Tab")
+        expect(
+            page.locator("#requirements").get_by_role("button", name=name, exact=True)
+        ).to_be_focused()
+    page.keyboard.press("Tab")
+    expect(guide_actions.last).to_be_focused()
     page.keyboard.press("Tab")
     expect(page.get_by_label("Original update", exact=True)).to_be_focused()
     page.screenshot(path=directory / "monitoring-narrow.png", full_page=True)

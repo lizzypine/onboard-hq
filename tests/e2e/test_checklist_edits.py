@@ -1,4 +1,4 @@
-"""Real-browser Manager edits, disclosure behavior, and frozen save recovery."""
+"""Real-browser Manager edits, history navigation, and frozen save recovery."""
 
 from uuid import uuid4
 
@@ -34,12 +34,13 @@ def open_editor(page, server, name="Drug screening"):
 
 
 def history(page):
-    return page.locator("#review-disclosure")
+    return page.locator("#history-dialog")
 
 
 def open_history(page):
     if not history(page).evaluate("e => e.open"):
-        history(page).locator("summary").click()
+        page.get_by_role("button", name="All update history", exact=True).click()
+    expect(history(page)).to_be_visible()
 
 
 def read_provider(page, server, provider_id):
@@ -79,40 +80,45 @@ def second_provider(page, server):
     return response.json()
 
 
-def test_disclosure_defaults_pending_counts_and_provider_switch(
+def test_history_defaults_pending_counts_and_provider_switch(
     page, app_server, seeded_provider
 ):
     load(page, app_server)
     expect(page.get_by_role("heading", name="3. Updates", exact=True)).to_be_visible()
-    assert not history(page).evaluate("e => e.open")
+    expect(history(page)).to_be_hidden()
     page.get_by_label("Original update", exact=True).fill("Drug screening completed.")
     page.get_by_role("button", name="Analyze update", exact=True).click()
     expect(page.locator("#pending-suggestions")).to_contain_text("1 pending suggestion")
-    assert not history(page).evaluate("e => e.open")
-    expect(page.locator("#request-status")).to_contain_text(
-        "Onboarding checklist"
-    )
-    summary = history(page).locator("summary")
-    summary.focus()
+    expect(history(page)).to_be_hidden()
+    expect(page.locator("#request-status")).to_contain_text("Onboarding checklist")
+    page.get_by_role("button", name="All update history", exact=True).focus()
     page.keyboard.press("Enter")
     expect(
-        page.get_by_role("article", name="Drug screening", exact=True)
+        history(page).get_by_role("article", name="Proposal: Drug screening")
     ).to_be_visible()
-    page.get_by_role("button", name="Refresh data", exact=True).click()
-    expect(page.get_by_label("Simulated role", exact=True)).to_be_enabled()
-    assert history(page).evaluate("e => e.open")
+    history(page).get_by_role("button", name="Refresh history", exact=True).click()
+    expect(history(page)).to_be_visible()
+    expect(history(page).get_by_role("button", name="Refresh history")).to_be_enabled()
+    page.keyboard.press("Escape")
     page.get_by_label("Simulated role", exact=True).select_option("manager")
     page.get_by_role("button", name="Approve", exact=True).click()
-    expect(page.locator("#pending-suggestions")).to_contain_text("0 pending suggestions")
-    assert history(page).evaluate("e => e.open")
+    expect(page.locator("#pending-suggestions")).to_contain_text(
+        "0 pending suggestions"
+    )
+    expect(history(page)).to_be_hidden()
+    open_history(page)
+    expect(
+        history(page).get_by_role("article", name="Review: Drug screening")
+    ).to_contain_text("Approved")
+    page.keyboard.press("Escape")
     other = second_provider(page, app_server)
     page.get_by_role("button", name="Refresh data", exact=True).click()
     page.get_by_label("Provider", exact=True).select_option(str(other["id"]))
     expect(row(page)).to_contain_text("Outstanding")
-    assert not history(page).evaluate("e => e.open")
+    expect(history(page)).to_be_hidden()
     page.get_by_label("Provider", exact=True).select_option(str(seeded_provider.id))
     expect(row(page)).to_contain_text("Completed")
-    assert not history(page).evaluate("e => e.open")
+    expect(history(page)).to_be_hidden()
 
 
 def test_manager_saves_three_fields_and_history_survives_restart(
@@ -312,7 +318,6 @@ def test_deadline_only_save_stales_suggestion_and_updates_monitoring(page, app_s
     group.get_by_label("Deadline", exact=True).fill("2026-11-10")
     save_editor(page, group)
     expect(row(page).get_by_role("cell").nth(4)).to_have_text("Overdue")
-    open_history(page)
     card = page.get_by_role("article", name="Drug screening", exact=True)
     expect(card.get_by_role("button", name="Approve", exact=True)).to_be_disabled()
     expect(card).to_contain_text("checklist changed")
@@ -347,12 +352,11 @@ def test_unfamiliar_current_and_proposed_values_are_safe_dropdown_options(
             (raw + " proposed", seeded_provider.id),
         )
     page.get_by_role("button", name="Refresh data", exact=True).click()
-    open_history(page)
     reviewed = page.get_by_role("combobox", name="Reviewed status", exact=True)
     expect(reviewed).to_have_value(raw + " proposed")
     expect(reviewed.get_by_role("option").last).to_have_text(raw + " proposed")
     assert page.evaluate("window.checklistInjected") is None
-    expect(page.locator("#requirements img, #review-results img")).to_have_count(0)
+    expect(page.locator("#requirements img, #history-entries img")).to_have_count(0)
 
 
 def test_editor_keyboard_and_header_position_at_desktop_and_phone(
@@ -418,7 +422,6 @@ def test_review_saves_verbatim_status_options(
             )
         page.get_by_role("button", name="Refresh data", exact=True).click()
     page.get_by_label("Simulated role", exact=True).select_option("manager")
-    open_history(page)
     card = page.get_by_role("article", name="Drug screening", exact=True)
     reviewed = card.get_by_role("combobox", name="Reviewed status", exact=True)
     if preserved_source == "saved":

@@ -1,0 +1,33 @@
+.checklist-heading-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.requirement-history-trigger { font: inherit; text-align: left; padding: 0; border: 0;
+  background: transparent; color: #175e78; text-decoration: underline; text-underline-offset: 3px; }
+.requirement-history-trigger:hover:not(:disabled) { color: #103e50; background: transparent; }
+.requirement-history-trigger:focus-visible { outline: 2px solid #237d9e; outline-offset: 4px; }
+#history-dialog { width: min(820px, calc(100vw - 24px)); max-height: calc(100dvh - 32px);
+  padding: 0; margin: auto; border: 1px solid #cbd8df; border-radius: 12px;
+  background: white; color: #18313f; box-shadow: 0 24px 90px #12374740; }
+#history-dialog::backdrop { background: #18313f66; }
+#history-dialog[open] { display: flex; flex-direction: column; }
+#history-dialog header, #history-dialog footer { flex: none; padding: 18px 24px; }
+#history-dialog header { border-bottom: 1px solid #dce5ea; }
+#history-dialog footer { border-top: 1px solid #dce5ea; display: flex; justify-content: flex-end; }
+#history-dialog h2 { margin: 0; }
+.history-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.history-close { border: 0; background: transparent; font-size: 25px; padding: 0 5px; }
+#history-context { margin: 8px 0 14px; overflow-wrap: anywhere; }
+.history-filter { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.history-picker { flex: 1; min-width: 0; }
+.history-filter select { display: block; width: 100%; margin-top: 6px; }
+.history-body { padding: 20px 24px; overflow-y: auto; min-height: 0; overflow-wrap: anywhere; }
+#history-current { padding: 10px 16px; background: #eef5f8; border-radius: 6px; margin-bottom: 18px; }
+#history-current p { margin: 6px 0; }
+.history-entry { border: 1px solid #d6e1e7; border-radius: 8px; padding: 18px; margin: 0 0 18px; }
+.history-entry h3, .history-entry h4, .history-entry h5 { margin: 0 0 10px; }
+.history-entry blockquote { margin: 12px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+#history-status:empty { display: none; }
+@media (max-width: 600px) {
+  #history-dialog header, #history-dialog footer, .history-body { padding: 16px; }
+  .history-entry { padding: 14px; }
+  .history-filter { align-items: stretch; }
+  .history-picker { flex-basis: 100%; }
+}

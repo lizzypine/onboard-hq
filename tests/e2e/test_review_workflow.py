@@ -10,6 +10,7 @@ from app.database import create_pool
 from app.models import SubmitUpdateRequest
 from app.repository.updates import UpdateRepository
 from tests.database import configured_test_url, disposable_database
+from tests.e2e.test_checklist_edits import open_history
 from tests.fixtures.current_database import run_async
 
 
@@ -18,13 +19,14 @@ def propose(page, app_server, text="Drug screening completed."):
     expect(page.get_by_label("Simulated role")).to_have_value("proposer")
     page.get_by_label("Original update").fill(text)
     page.get_by_role("button", name="Analyze update", exact=True).click()
+    expect(page.get_by_label("Simulated role")).to_be_enabled()
+
+
+def reviewed_card(page, name="Drug screening"):
     open_history(page)
-
-
-def open_history(page):
-    disclosure = page.locator("#review-disclosure")
-    if not disclosure.evaluate("e => e.open"):
-        disclosure.locator("summary").click()
+    return page.locator("#history-dialog").get_by_role(
+        "article", name="Review: " + name, exact=True
+    )
 
 
 def drug_card(page):
@@ -44,17 +46,16 @@ def test_manager_approval_survives_refresh_and_server_restart(page, app_server):
     expect(drug_card(page)).to_be_visible()
     expect(page.get_by_role("button", name="Approve", exact=True)).to_have_count(0)
     page.reload()
-    open_history(page)
     expect(drug_card(page)).to_be_visible()
     page.get_by_label("Simulated role").select_option("manager")
     page.get_by_role("button", name="Approve", exact=True).click()
     expect(drug_row(page)).to_contain_text("Completed")
-    expect(drug_card(page)).to_contain_text("Approved")
+    expect(reviewed_card(page)).to_contain_text("Approved")
     app_server.restart()
     page.reload()
     open_history(page)
     expect(drug_row(page)).to_contain_text("Completed")
-    expect(drug_card(page)).to_contain_text("Drug screening completed.")
+    expect(reviewed_card(page)).to_contain_text("Drug screening completed.")
 
 
 def test_manager_can_correct_date_and_confirmation_resets_after_editing(
@@ -79,7 +80,7 @@ def test_manager_can_correct_date_and_confirmation_resets_after_editing(
     page.screenshot(path=screenshot_dir / "manager-narrow.png", full_page=True)
     card.get_by_role("button", name="Approve with corrections", exact=True).click()
     expect(drug_row(page)).to_contain_text("2026-11-17")
-    expect(drug_card(page)).to_contain_text("Approved with corrections")
+    expect(reviewed_card(page)).to_contain_text("Approved with corrections")
 
 
 def test_multiple_suggestions_have_independent_review_decisions(page, app_server):
@@ -94,7 +95,7 @@ def test_multiple_suggestions_have_independent_review_decisions(page, app_server
         "article", name="Insurance credentialing", exact=True
     )
     credentialing.get_by_role("button", name="Reject", exact=True).click()
-    expect(credentialing).to_contain_text("Rejected")
+    expect(reviewed_card(page, "Insurance credentialing")).to_contain_text("Rejected")
     expect(drug_row(page)).to_contain_text("Completed")
     credential_row = (
         page.get_by_role("table", name="Onboarding checklist")
@@ -117,6 +118,7 @@ def test_empty_failed_and_warning_updates_remain_visible(
 ):
     app_server.restart(scenario)
     propose(page, app_server, "Synthetic update.")
+    open_history(page)
     expect(page.get_by_text(expected, exact=False).first).to_be_visible()
     page.reload()
     open_history(page)
@@ -151,7 +153,7 @@ def test_status_correction_and_date_clearing_keep_deadline(page, app_server):
     expect(drug_row(page)).to_contain_text("Incomplete")
     expect(drug_row(page)).to_contain_text("Not set")
     expect(drug_row(page)).to_contain_text("2026-11-30")
-    expect(card).to_contain_text("Proposed status: Completed")
+    expect(reviewed_card(page)).to_contain_text("Proposed status: Completed")
 
 
 def test_lost_analysis_response_reuses_request_without_creating_second_update(
@@ -230,7 +232,7 @@ def test_stale_manager_view_refreshes_after_conflict_and_can_reject_old_proposal
     expect(page.locator("#request-status")).to_contain_text("checklist changed")
     expect(newest.get_by_role("button", name="Approve", exact=True)).to_be_disabled()
     newest.get_by_role("button", name="Reject", exact=True).click()
-    expect(newest).to_contain_text("Rejected")
+    expect(reviewed_card(page).filter(has_text="Rejected")).to_be_visible()
     expect(drug_row(page)).to_contain_text("Completed")
 
 
@@ -249,6 +251,7 @@ def test_unfinished_analysis_has_no_review_actions(page, app_server, seeded_prov
     page.goto(app_server.url)
     open_history(page)
     expect(page.get_by_text("Analysis unfinished.", exact=False)).to_be_visible()
+    page.keyboard.press("Escape")
     page.get_by_label("Simulated role").select_option("manager")
     expect(page.get_by_role("button", name="Approve", exact=True)).to_have_count(0)
 

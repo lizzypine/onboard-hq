@@ -159,8 +159,8 @@ def test_exact_citation_retained_after_withdrawal_and_reload(
     dialog.get_by_text("[1] Internal licensing guide", exact=True).click()
     expect(dialog.locator("blockquote")).to_have_text(QUOTE)
     page.keyboard.press("Escape")
-    page.get_by_text("Review history", exact=False).last.click()
-    expect(page.locator("#review-results")).to_have_text("No saved updates yet.")
+    page.get_by_role("button", name="All update history", exact=True).click()
+    expect(page.locator("#history-entries")).to_have_text("No saved updates yet.")
     assert (
         page.request.get(app_server.url + f"/providers/{seeded_provider.id}").json()
         == before

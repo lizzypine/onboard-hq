@@ -13,7 +13,7 @@ from tests.e2e.test_provider_lifecycle import (
     current,
     open_manager,
 )
-from tests.e2e.test_review_workflow import drug_card, open_history
+from tests.e2e.test_review_workflow import drug_card, reviewed_card
 
 
 def test_pending_review_stays_disabled_when_archived_and_works_after_restore(
@@ -32,7 +32,6 @@ def test_pending_review_stays_disabled_when_archived_and_works_after_restore(
     open_manager(page, app_server)
     click_action(page, "archive")
     assert_loaded(page, identity, True)
-    open_history(page)
     card = drug_card(page)
     expect(card.get_by_label("Reviewed status", exact=True)).to_be_disabled()
     expect(card.get_by_label("Reviewed date", exact=True)).to_be_disabled()
@@ -40,10 +39,9 @@ def test_pending_review_stays_disabled_when_archived_and_works_after_restore(
     expect(card.get_by_role("button", name="Reject", exact=True)).to_be_disabled()
     click_action(page, "restore")
     assert_loaded(page, identity, False)
-    open_history(page)
     expect(card.get_by_label("Reviewed status", exact=True)).to_be_enabled()
     card.get_by_role("button", name="Approve", exact=True).click()
-    expect(card).to_contain_text("Approved")
+    expect(reviewed_card(page)).to_contain_text("Approved")
     expect(row(page)).to_contain_text("Completed")
 
 
