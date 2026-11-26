@@ -6,6 +6,7 @@ from playwright.sync_api import expect
 
 from tests.database import ROOT, configured_test_url
 from tests.e2e.test_checklist_edits import open_history, row, save_editor
+from tests.e2e.test_review_workflow import reviewed_card
 from tests.fixtures.current_database import configure_catalog
 
 
@@ -348,13 +349,12 @@ def test_saved_addition_manual_edit_analysis_and_approval_survive_restart(
     page.get_by_label("Provider", exact=True).select_option(str(saved["id"]))
     page.get_by_label("Original update", exact=True).fill("Orientation completed.")
     page.get_by_role("button", name="Analyze update", exact=True).click()
-    open_history(page)
     card = page.get_by_role("article", name="Orientation", exact=True)
     expect(card).to_contain_text("Orientation completed.")
     expect(row(page, "Orientation")).to_contain_text("Pending")
     page.get_by_label("Simulated role", exact=True).select_option("manager")
     card.get_by_role("button", name="Approve", exact=True).click()
-    expect(card).to_contain_text("Approved")
+    expect(reviewed_card(page, "Orientation")).to_contain_text("Approved")
     expect(row(page, "Orientation")).to_contain_text("Completed")
     expect(page.locator("#count-finished")).to_have_text("2")
     assert (
@@ -382,9 +382,7 @@ def test_saved_addition_manual_edit_analysis_and_approval_survive_restart(
     expect(
         page.get_by_role("article", name="Manager checklist edit: Orientation")
     ).to_be_visible()
-    expect(page.get_by_role("article", name="Orientation", exact=True)).to_contain_text(
-        "Approved"
-    )
+    expect(reviewed_card(page, "Orientation")).to_contain_text("Approved")
 
 
 @pytest.mark.parametrize("name", ["Constructor", "__proto__", "constructor"])

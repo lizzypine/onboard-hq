@@ -217,11 +217,16 @@ update, supporting text, and warnings. The checklist's pending count shows sugge
 waiting for a decision; saved checklist values change only after approval. Multiple
 proposals for one requirement remain separate, newest first.
 
-**Review history** retains original updates, completed decisions, and manual checklist
-edits. It starts closed; choose its heading to open or close it. Normal refreshes
-and saved decisions preserve your choice; changing providers or reloading the page
-starts it closed again. The visible Non-manager role uses the existing internal
-`proposer` API value and has the same permissions.
+Click a requirement name in the **Onboarding checklist** to open its **Update history**
+dialog. It shows original updates, supporting text, decisions, manual edits, and
+saved before/after values, with simulated Manager attribution for reviews and edits.
+Choose **All update history** in the checklist heading to see every saved update,
+including unmatched, failed, and unfinished analysis, or select a requirement in
+the dialog to filter its activity. History is read-only; pending review controls
+remain beneath their checklist rows. **Refresh history** keeps the selected filter
+and unchanged review/edit drafts. Close or press Escape to return to the checklist;
+changing providers or reloading the page closes history. The visible Non-manager
+role uses the existing internal `proposer` API value and has the same permissions.
 
 The striped checklist has colored, labeled status badges. Green means a recognized
 finished status; blue is Pending, Scheduled, or Submitted; amber is Outstanding or

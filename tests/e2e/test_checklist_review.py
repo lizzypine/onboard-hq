@@ -7,7 +7,7 @@ import pytest
 from playwright.sync_api import expect
 
 from tests.database import configured_test_url
-from tests.e2e.test_review_workflow import drug_card, drug_row, propose
+from tests.e2e.test_review_workflow import drug_card, drug_row, propose, reviewed_card
 
 
 def manager_review(page, app_server):
@@ -87,9 +87,9 @@ def test_return_to_saved_status_is_a_correction_without_highlight(page, app_serv
     drug_card(page).get_by_role(
         "button", name="Approve with corrections", exact=True
     ).click()
-    expect(drug_card(page)).to_contain_text("Approved with corrections")
-    expect(drug_card(page)).to_contain_text("Proposed status: Completed")
-    expect(drug_card(page)).to_contain_text("Applied status: Scheduled")
+    expect(reviewed_card(page)).to_contain_text("Approved with corrections")
+    expect(reviewed_card(page)).to_contain_text("Proposed status: Completed")
+    expect(reviewed_card(page)).to_contain_text("Applied status: Scheduled")
     expect(drug_row(page)).to_contain_text("Scheduled")
 
 
@@ -101,7 +101,7 @@ def test_no_date_proposed_preserves_saved_date(page, app_server, seeded_provider
     expect(field_cell(table, "date")).to_contain_text("No date proposed")
     changed(field_cell(table, "date"), False)
     drug_card(page).get_by_role("button", name="Approve", exact=True).click()
-    expect(drug_card(page)).to_contain_text("Approved")
+    expect(reviewed_card(page)).to_contain_text("Approved")
     expect(drug_row(page)).to_contain_text("2026-11-20")
     expect(drug_row(page)).to_contain_text("2026-11-30")
 
@@ -129,7 +129,7 @@ def test_date_edits_set_clear_and_restore_comparison(
         button = "Approve with corrections"
     expect(drug_row(page)).to_contain_text("2026-11-20")
     drug_card(page).get_by_role("button", name=button, exact=True).click()
-    expect(drug_card(page)).to_contain_text("Applied date:")
+    expect(reviewed_card(page)).to_contain_text("Applied date:")
     expect(drug_row(page)).to_contain_text(expected)
     expect(drug_row(page)).to_contain_text("2026-11-30")
 
@@ -152,7 +152,7 @@ def test_partial_date_cannot_be_mistaken_for_clear(page, app_server, seeded_prov
         )
     ).to_be_disabled()
     drug_card(page).get_by_role("button", name="Reject", exact=True).click()
-    expect(drug_card(page)).to_contain_text("Rejected")
+    expect(reviewed_card(page)).to_contain_text("Rejected")
     expect(drug_row(page)).to_contain_text("2026-11-20")
 
 
@@ -178,7 +178,7 @@ def test_clearing_inferred_date_resets_confirmation_and_can_be_rejected(
         )
     ).to_be_disabled()
     drug_card(page).get_by_role("button", name="Reject", exact=True).click()
-    expect(drug_card(page)).to_contain_text("Rejected")
+    expect(reviewed_card(page)).to_contain_text("Rejected")
     expect(drug_row(page)).to_contain_text("Scheduled")
     expect(drug_row(page)).to_contain_text("Not set")
 

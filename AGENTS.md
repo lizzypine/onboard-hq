@@ -24,7 +24,7 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 ## Layout
 
 - `app/main.py`: routes, dependency/lifecycle wiring, and HTTP error mapping. No business rules.
-- `app/page.py`: page markup; `app/static/onboarding.js`: coherent provider selection/loading, creation recovery, pending suggestion content beneath matching checklist rows, completed history display, and saved-review orchestration.
+- `app/page.py`: page markup; `app/static/onboarding.js`: coherent provider selection/loading, creation recovery, pending suggestion content beneath matching checklist rows, history snapshot wiring, and saved-review orchestration.
 - `app/static/providers.js`: Manager creation/catalog requests, frozen save recovery, coherent selection callbacks, and duplicate-name labels. No analysis or review calls.
 - `app/static/provider-lifecycle.js`: inline Manager Archive/Restore controls, native archive confirmation, explicit desired-state requests, and read-only reconciliation of unconfirmed responses. No automatic write retries.
 - `app/static/provider-wizard.js` and `app/static/provider-wizard.css`: native five-step modal, per-item additional requirement drafts, final review, and scoped layout. No HTTP/storage/model calls.
@@ -32,6 +32,8 @@ The project proposal is `docs/proposal.md`; keep that file unchanged. Record sub
 - `app/static/date-help.js`: shared Expected completion date explanation on hover/focus/tap, scoped to the active dialog when open; SQL/API fields remain named scheduled_date.
 - `app/static/checklist.js`: saved checklist rows, status badges, in-place refresh of controller-supplied requirement detail nodes, one Manager edit draft, and frozen manual-save recovery. No provider/history loading, suggestion review calls, or model calls.
 - `app/static/checklist-order.js`: shared presentation-only deadline ordering for saved checklists and provider-wizard previews/review; dated items first, earliest deadline first, alphabetical ties and undated items. Does not mutate input arrays.
+- `app/static/requirement-history.js` and `app/static/history.css`: read-only native history dialog, exact requirement filtering, current values, coherent refresh, and focus/context handling. No HTTP, storage, model, or save calls.
+- `app/static/history-events.js`: pure provider/requirement-scoped activity projection and ordering by actual review/edit/submission time. `app/static/history-render.js`: safe shared update/suggestion evidence and read-only history cards; no review controls or persistence.
 - `app/static/checklist-recovery.js`: validate frozen UUID-era drafts and read saved history by retained retry keys; no save POSTs or model calls. The checklist controller clears resolved drafts only after a coherent saved view loads.
 - `app/static/statuses.js`: safe native status dropdown and labeled badge DOM helpers; choices and tones come from the dashboard.
 - `app/static/review.js`: one suggestion's editable checklist comparison, draft date actions, validation, and manager decision callbacks. No data loading or persistence.

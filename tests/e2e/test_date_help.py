@@ -73,6 +73,7 @@ def test_expected_date_wording_and_help_in_editor_review_and_history(page, app_s
     open_history(page)
     history = page.get_by_role("article", name="Manager checklist edit: Drug screening")
     expect(history).to_contain_text("Expected completion date: Not set → 2026-12-10")
+    page.keyboard.press("Escape")
     page.get_by_label("Original update", exact=True).fill("Drug screening completed.")
     page.get_by_role("button", name="Analyze update", exact=True).click()
     card = page.get_by_role("article", name="Drug screening", exact=True)

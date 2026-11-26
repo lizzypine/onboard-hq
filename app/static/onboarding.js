@@ -2,7 +2,9 @@
 
 import {renderReviewControls} from "./review.js?v=4";
 import {providerLabel, setupProviderCreation} from "./providers.js?v=5";
-import {setupChecklist} from "./checklist.js?v=8";
+import {setupChecklist} from "./checklist.js?v=9";
+import {setupRequirementHistory} from "./requirement-history.js";
+import {renderUpdateEvidence, renderSuggestionEvidence} from "./history-render.js";
 import {setupDateHelp} from "./date-help.js?v=4";
 import {setupProviderLifecycle} from "./provider-lifecycle.js?v=2";
 import {setupAskAI} from "./ask-ai.js";
@@ -16,14 +18,13 @@ const submitButton = document.getElementById("submit-update");
 const refreshButton = document.getElementById("refresh-data");
 const updateText = document.getElementById("update-text");
 const status = document.getElementById("request-status");
-const results = document.getElementById("review-results");
 const pendingDetails = new Map();
+let pendingCards = new Map();
 const state = {provider: null, monitoring: null, history: [], edits: [], checklistOptions: [], busy: false, generation: 0, pending: null, preferredProviderId: null};
 let creation = null;
 let checklist = null;
 let lifecycle = null;
-const disclosure = document.getElementById("review-disclosure");
-disclosure.open = false;
+let requirementHistory = null;
 
 function text(parent, tag, value) {
   const element = document.createElement(tag);
@@ -61,6 +62,7 @@ function setBusy(value) {
   checklist?.setBusy(value);
   lifecycle?.setBusy(value);
   askAI.setBusy(value);
+  requirementHistory?.setBusy(value);
 }
 
 function renderMonitoring() {
@@ -108,49 +110,7 @@ async function decide(suggestion, body) {
   } finally { setBusy(false); }
 }
 
-function renderSuggestion(parent, suggestion, completed, update = null) {
-  const card = text(parent, "article", "");
-  card.className = "suggestion";
-  card.setAttribute("aria-label", suggestion.requirement);
-  text(card, "h4", suggestion.requirement);
-  if (update) renderUpdateEvidence(card, update, "h5");
-  const canReview = !suggestion.decision && completed && roleSelect.value === "manager";
-  if (!canReview) {
-    text(card, "p", "Proposed status: " + suggestion.proposed_status);
-    text(card, "p", "Proposed date: " + (suggestion.proposed_date || "Not specified"));
-  }
-  text(card, "h5", "Supporting text");
-  text(card, "blockquote", suggestion.supporting_text);
-  if (suggestion.date_text) text(card, "p", "Original date wording: " + suggestion.date_text);
-  if (suggestion.date_explanation) text(card, "p", "Original inference: " + suggestion.date_explanation);
-  if (suggestion.decision) {
-    const decision = suggestion.decision;
-    text(card, "p", {approved: "Approved", corrected: "Approved with corrections", rejected: "Rejected"}[decision.outcome]);
-    if (decision.outcome !== "rejected") {
-      text(card, "p", "Applied status: " + decision.applied_status);
-      text(card, "p", "Applied date: " + (decision.applied_scheduled_date || "Not set"));
-    } else text(card, "p", "Checklist unchanged by this decision.");
-    text(card, "p", "Reviewed: " + new Date(decision.reviewed_at).toLocaleString());
-  } else if (canReview) {
-    renderReviewControls(card, suggestion, state.provider.requirements.find(r => r.id === suggestion.requirement_id),
-      {busy: state.busy || Boolean(state.provider.archived_at), onDecide: decide,
-        statusChoices: state.checklistOptions.find(r => r.requirement_id === suggestion.requirement_id)?.statuses || []});
-  } else text(card, "p", completed ? "Awaiting manager review." : "Analysis is unfinished; this cannot be reviewed.");
-}
-
-function renderUpdateEvidence(parent, update, heading = "h3") {
-  text(parent, heading, "Original update");
-  text(parent, "blockquote", update.update_text);
-  text(parent, "p", "Submitted: " + new Date(update.created_at).toLocaleString());
-  text(parent, "p", update.processing_state === "processing" ? "Analysis unfinished. No checklist changes were applied." : update.message);
-  if (update.ambiguities.length) {
-    text(parent, heading, "Warnings and ambiguities");
-    const list = text(parent, "ul", "");
-    update.ambiguities.forEach(warning => text(list, "li", warning));
-  }
-}
-
-function renderPendingSuggestion(suggestion, update) {
+function renderPendingSuggestion(suggestion, update, previous) {
   let container = pendingDetails.get(suggestion.requirement_id);
   if (!container) {
     container = document.createElement("div");
@@ -158,42 +118,47 @@ function renderPendingSuggestion(suggestion, update) {
     text(container, "h3", "Pending suggestions");
     pendingDetails.set(suggestion.requirement_id, container);
   }
-  renderSuggestion(container, suggestion, true, update);
+  const current = state.provider.requirements.find(r => r.id === suggestion.requirement_id);
+  const choices = state.checklistOptions.find(r => r.requirement_id === suggestion.requirement_id)?.statuses || [];
+  const fingerprint = JSON.stringify([state.provider.id, roleSelect.value, current, choices, suggestion,
+    update.update_text, update.created_at, update.message, update.ambiguities]);
+  if (previous?.fingerprint === fingerprint) {
+    container.append(previous.card);
+    pendingCards.set(suggestion.id, previous);
+    return;
+  }
+  const card = text(container, "article", "");
+  card.className = "suggestion";
+  card.setAttribute("aria-label", suggestion.requirement);
+  text(card, "h4", suggestion.requirement);
+  renderUpdateEvidence(card, update, "h5");
+  if (roleSelect.value !== "manager") {
+    text(card, "p", "Proposed status: " + suggestion.proposed_status);
+    text(card, "p", "Proposed date: " + (suggestion.proposed_date || "Not specified"));
+  }
+  renderSuggestionEvidence(card, suggestion);
+  if (roleSelect.value === "manager") {
+    renderReviewControls(card, suggestion, current,
+      {busy: state.busy || Boolean(state.provider.archived_at), onDecide: decide,
+        statusChoices: choices});
+  } else text(card, "p", "Awaiting manager review.");
+  pendingCards.set(suggestion.id, {fingerprint, card});
 }
 
-function renderReviews() {
-  results.replaceChildren();
+function renderPendingReviews() {
+  const previous = pendingCards;
+  pendingCards = new Map();
   pendingDetails.clear();
-  const pending = state.history.reduce((count, update) => count + (update.processing_state === "completed" ? update.suggestions.filter(s => !s.decision).length : 0), 0);
+  let pending = 0;
+  for (const update of state.history) {
+    if (update.processing_state !== "completed") continue;
+    for (const suggestion of update.suggestions) {
+      if (suggestion.decision) continue;
+      pending++;
+      renderPendingSuggestion(suggestion, update, previous.get(suggestion.id));
+    }
+  }
   document.getElementById("pending-suggestions").textContent = pending + " pending suggestion" + (pending === 1 ? "" : "s");
-  if (!state.history.length && !state.edits.length) text(results, "p", "No saved updates yet.");
-  const entries = [...state.history.map(record => ({kind: "update", record})), ...state.edits.map(record => ({kind: "edit", record}))]
-    .sort((a, b) => Date.parse(b.record.created_at) - Date.parse(a.record.created_at) || b.kind.localeCompare(a.kind) || b.record.id - a.record.id);
-  for (const entry of entries) {
-    if (entry.kind === "edit") { renderManualEdit(entry.record); continue; }
-    const update = entry.record;
-    const group = text(results, "div", "");
-    group.className = "update";
-    renderUpdateEvidence(group, update);
-    const completed = update.processing_state === "completed";
-    if (completed && update.suggestions.some(s => !s.decision)) text(group, "p", "Pending suggestions are shown in the Onboarding checklist.");
-    update.suggestions.forEach(suggestion => {
-      if (completed && !suggestion.decision) renderPendingSuggestion(suggestion, update);
-      else renderSuggestion(group, suggestion, completed);
-    });
-  }
-}
-
-function renderManualEdit(edit) {
-  const card = text(results, "article", "");
-  card.className = "update manual-edit-history";
-  card.setAttribute("aria-label", "Manager checklist edit: " + edit.requirement_name);
-  text(card, "h3", "Manager checklist edit");
-  text(card, "p", edit.requirement_name);
-  for (const [label, field] of [["Status", "status"], ["Expected completion date", "scheduled_date"], ["Deadline", "deadline"]]) {
-    if (edit["previous_" + field] !== edit["applied_" + field]) text(card, "p", label + ": " + (edit["previous_" + field] || "Not set") + " → " + (edit["applied_" + field] || "Not set"));
-  }
-  text(card, "p", "Saved by simulated Manager: " + new Date(edit.created_at).toLocaleString());
 }
 
 async function loadState() {
@@ -207,8 +172,9 @@ async function loadState() {
   state.edits = edits;
   state.checklistOptions = dashboard.checklist_options;
   askAI.syncProvider(state.provider);
-  renderReviews();
+  renderPendingReviews();
   renderChecklist();
+  requirementHistory?.render(state.provider, state.history, state.edits);
   checklist?.onSnapshotLoaded(state.edits);
 }
 
@@ -220,8 +186,9 @@ function clearSnapshot() {
   state.edits = [];
   state.checklistOptions = [];
   askAI.syncProvider(null);
-  renderReviews();
+  renderPendingReviews();
   renderChecklist();
+  requirementHistory?.render(null, [], []);
 }
 
 async function initialize(preferredId = state.preferredProviderId) {
@@ -268,7 +235,7 @@ document.getElementById("update-form").addEventListener("submit", async event =>
     const hasPending = state.history.some(update => update.id === analyzed.id && update.processing_state === "completed" && update.suggestions.some(s => !s.decision));
     status.textContent = hasPending
       ? "Update and suggestions saved. Review pending suggestions beneath their requirements in the Onboarding checklist."
-      : "Update saved. No pending suggestions from this update. Open Review history for the saved result and any warnings.";
+      : "Update saved. No pending suggestions from this update. Open All update history in the Onboarding checklist for the saved result and any warnings.";
   } catch (error) {
     if (error.savedUpdateId) state.pending = null;
     if (!saved) {
@@ -293,7 +260,13 @@ function requirementDetails(requirement) {
   return pending;
 }
 
+requirementHistory = setupRequirementHistory({dialog: document.getElementById("history-dialog"),
+  trigger: document.getElementById("open-history"), onRefresh: async () => {
+    setBusy(true);
+    try { await loadState(); } finally { setBusy(false); }
+  }});
 checklist = setupChecklist({api, roleSelect, setBusy, onSaved: loadState,
+  onHistory: (requirement, opener) => requirementHistory.open(requirement.id, opener),
   requirementDetails, onLegacyProvider: async provider => {
   document.getElementById("provider-state").value = provider.archived_at ? "archived" : "active";
   state.preferredProviderId = provider.id;
@@ -304,7 +277,6 @@ creation = setupProviderCreation({api, roleSelect, setBusy, onCreated: async (id
   state.preferredProviderId = id;
   updateText.value = "";
   state.pending = null;
-  disclosure.open = false;
   if (!await initialize(id) || state.provider?.id !== id) throw new Error("Saved provider could not load.");
   providerSelect.focus();
 }});
@@ -314,7 +286,6 @@ lifecycle = setupProviderLifecycle({api, roleSelect, setBusy, onChanged: async p
   state.preferredProviderId = provider.id;
   updateText.value = "";
   state.pending = null;
-  disclosure.open = false;
   checklist.resetDraft();
   if (!await initialize(provider.id) || state.provider?.id !== provider.id
       || Boolean(state.provider.archived_at) !== archived) {
@@ -327,12 +298,11 @@ lifecycle = setupProviderLifecycle({api, roleSelect, setBusy, onChanged: async p
   state.preferredProviderId = id;
   updateText.value = "";
   state.pending = null;
-  disclosure.open = false;
   providerSelect.replaceChildren();
   clearSnapshot();
 }});
 roleSelect.addEventListener("change", () => {
-  renderReviews();
+  renderPendingReviews();
   creation.syncRole();
   checklist.syncRole();
   lifecycle.syncRole();
@@ -344,7 +314,6 @@ function changeProviderSelection() {
   state.preferredProviderId = null;
   updateText.value = "";
   state.pending = null;
-  disclosure.open = false;
   initialize();
 }
 providerSelect.addEventListener("change", changeProviderSelection);

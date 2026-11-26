@@ -137,7 +137,6 @@ def test_real_old_browser_cutover_preserves_history_and_all_current_flows(
         "Update and suggestions saved"
     )
     page.get_by_label("Simulated role", exact=True).select_option("manager")
-    page.locator("#review-disclosure > summary").click()
     card = page.get_by_role("article", name="Drug screening", exact=True).first
     card.get_by_role("button", name="Approve", exact=True).click()
     expect(row(page)).to_contain_text("Completed")

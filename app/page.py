@@ -63,13 +63,10 @@ PAGE = """<!doctype html>
     .manual-change { background: #ffe29a; padding: 6px; }
     .manual-change-label { display: block; font-size: .85rem; margin-top: 6px; }
     #checklist-status:empty { display: none; }
-    #review-disclosure > summary { cursor: pointer; }
-    #review-disclosure > summary h2 { display: inline; }
     #pending-suggestions { color: #425d6b; }
     .requirement-suggestions > td { padding: 16px; background: #f4f8fb;
       border-left: 4px solid #ad7513; }
     .requirement-suggestions h3 { margin-top: 0; }
-    #review-results { margin-top: 20px; }
     p, li, blockquote { overflow-wrap: anywhere; }
     blockquote { margin: 12px 0; padding: 10px 14px; border-left: 3px solid #a9bfca;
       background: #f5f8fa; white-space: pre-wrap; }
@@ -111,7 +108,8 @@ PAGE = """<!doctype html>
     }
   </style>
   <link rel="stylesheet" href="/static/knowledge.css?v=1">
-  <script src="/static/onboarding.js?v=9" type="module"></script>
+  <link rel="stylesheet" href="/static/history.css?v=1">
+  <script src="/static/onboarding.js?v=10" type="module"></script>
 </head>
 <body>
 <main>
@@ -166,11 +164,14 @@ PAGE = """<!doctype html>
   <section aria-labelledby="checklist-heading">
     <div class="section-heading">
       <h2 id="checklist-heading">2. Onboarding checklist</h2>
+      <div class="checklist-heading-actions">
+      <button id="open-history" type="button" aria-haspopup="dialog" disabled>All update history</button>
       <button id="open-ask" class="primary ask-trigger" type="button" aria-haspopup="dialog" disabled>
         <svg viewBox="0 0 28 28" width="21" height="21" aria-hidden="true" focusable="false">
           <path fill="currentColor" d="M12 2l2.8 8.2L23 13l-8.2 2.8L12 24l-2.8-8.2L1 13l8.2-2.8zM23 1l1.1 3.9L28 6l-3.9 1.1L23 11l-1.1-3.9L18 6l3.9-1.1zM24 18l.8 2.2L27 21l-2.2.8L24 24l-.8-2.2L21 21l2.2-.8z"/>
         </svg>Ask AI
       </button>
+      </div>
     </div>
     <p id="pending-suggestions" role="status" aria-live="polite">0 pending suggestions</p>
     <div id="monitoring-summary" role="region" aria-label="Monitoring summary" hidden>
@@ -206,12 +207,25 @@ PAGE = """<!doctype html>
     </form>
     <p id="request-status" role="status" aria-live="polite">Loading saved data…</p>
   </section>
-  <section aria-labelledby="review-heading">
-    <details id="review-disclosure">
-      <summary><h2 id="review-heading">4. Review history</h2></summary>
-      <div id="review-results"></div>
-    </details>
-  </section>
+  <dialog id="history-dialog" aria-labelledby="history-heading">
+    <header>
+      <div class="history-title"><h2 id="history-heading">Update history</h2>
+        <button type="button" class="history-close" data-close-history aria-label="Close update history">×</button></div>
+      <p id="history-context"></p>
+      <div class="history-filter">
+        <div class="history-picker"><label for="history-requirement">Requirement</label>
+          <select id="history-requirement"></select></div>
+        <button type="button" id="refresh-history">Refresh history</button>
+      </div>
+    </header>
+    <div class="history-body">
+      <div id="history-current" role="region" aria-label="Current saved values" hidden></div>
+      <p class="notice">Showing saved records. Pending review controls remain beneath the matching checklist requirement.</p>
+      <p id="history-status" role="status" aria-live="polite"></p>
+      <div id="history-entries"></div>
+    </div>
+    <footer><button type="button" data-close-history>Close history</button></footer>
+  </dialog>
   <section id="knowledge-sources" aria-labelledby="sources-heading" hidden>
     <h2 id="sources-heading">Manage licensing guidance</h2>
     <p class="knowledge-muted">Review and publish sources for licensing questions.</p>

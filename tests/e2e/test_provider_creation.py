@@ -8,7 +8,7 @@ import pytest
 from playwright.sync_api import expect
 
 from tests.database import configured_test_url
-from tests.e2e.test_review_workflow import open_history
+from tests.e2e.test_review_workflow import open_history, reviewed_card
 from tests.fixtures.current_database import configure_catalog, provider_type_id
 
 
@@ -95,7 +95,9 @@ def test_manager_adds_and_selects_an_independent_provider(
     assert_new_counts(page)
     expect(page.get_by_label("Original update", exact=True)).to_have_value("")
     expect(page.locator("#provider-description")).to_contain_text("2027-01-15")
-    expect(page.locator("#review-results")).to_contain_text("No saved updates yet")
+    open_history(page)
+    expect(page.locator("#history-entries")).to_contain_text("No saved updates yet")
+    page.keyboard.press("Escape")
     assert (
         page.request.get(app_server.url + f"/providers/{seeded_provider.id}").json()
         == original
@@ -302,13 +304,12 @@ def test_new_provider_analysis_and_review_stay_scoped_after_restart(
     assert_new_counts(page)
     page.get_by_label("Original update", exact=True).fill("Drug screening on the 18th.")
     page.get_by_role("button", name="Analyze update", exact=True).click()
-    open_history(page)
     card = page.get_by_role("article", name="Drug screening", exact=True)
     expect(card).to_contain_text("2026-12-18")
     page.get_by_label("Simulated role", exact=True).select_option("manager")
     card.get_by_label("Confirm inferred date", exact=True).check()
     card.get_by_role("button", name="Approve", exact=True).click()
-    expect(card).to_contain_text("Approved")
+    expect(reviewed_card(page)).to_contain_text("Approved")
     assert (
         page.request.get(app_server.url + f"/providers/{seeded_provider.id}").json()
         == original

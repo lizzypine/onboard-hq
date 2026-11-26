@@ -34,7 +34,7 @@ function monitoringLabel(indicator) {
   return indicator.deadline_state === "due_today" ? "Outstanding — due today" : "Outstanding";
 }
 
-export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvider, requirementDetails = () => null}) {
+export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvider, onHistory, requirementDetails = () => null}) {
   const body = document.getElementById("requirements");
   const notice = document.getElementById("checklist-status");
   const retry = document.getElementById("retry-checklist");
@@ -122,6 +122,7 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvi
   function syncControls() {
     body.querySelectorAll(".checklist-fields").forEach(fieldset => { fieldset.disabled = busy; });
     body.querySelectorAll(".checklist-edit-button").forEach(button => { button.disabled = busy || Boolean(pending); });
+    body.querySelectorAll(".requirement-history-trigger").forEach(button => { button.disabled = busy; });
     if (syncDraft) syncDraft();
     showNotice();
     renderLegacy();
@@ -241,7 +242,11 @@ export function setupChecklist({api, roleSelect, setBusy, onSaved, onLegacyProvi
       const row = text(body, "tr", "", "requirement-row " + (index % 2 ? "stripe-even" : "stripe-odd"));
       row.dataset.requirementId = requirement.id;
       row.classList.toggle("editing", editId === requirement.id);
-      const name = text(row, "td", requirement.name);
+      const name = text(row, "td", "");
+      const history = text(name, "button", requirement.name, "requirement-history-trigger");
+      history.type = "button";
+      history.setAttribute("aria-haspopup", "dialog");
+      history.addEventListener("click", () => onHistory(requirement, history));
       if (requirement.checklist_template_id === null) text(name, "span", "Additional · this provider only", "provider-additional-label");
       if (editId === requirement.id) text(name, "span", "Editing", "editing-label");
       text(row, "td", "").append(statusBadge(requirement.status, catalog.get(requirement.id)?.status_tone));
